@@ -1,0 +1,2 @@
+main_console : main_console.c nii_dicom.c nifti1_io_core.c nii_ortho.c nii_dicom_batch.c
+	g++ -O3 -x c++ -I. -lz main_console.c nii_dicom.c nifti1_io_core.c nii_ortho.c nii_dicom_batch.c  -s -o dcm2niix
