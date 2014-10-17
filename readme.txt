@@ -1,7 +1,7 @@
 Building command line version:
 
  This requires a C compiler. With a terminal, change directory to the 'conosle' folder and run the following: 
-  g++ -O3 main_console.c nii_dicom.c nifti1_io_core.c nii_ortho.c nii_dicom_batch.c untgz.c -s -o dcm2niix -lz
+  g++ -O3 main_console.c nii_dicom.c nifti1_io_core.c nii_ortho.c nii_dicom_batch.c -s -o dcm2niix -lz
 Building command line version universal binary from OSX 64 bit system:
  This requires a C compiler. With a terminal, change directory to the 'conosle' folder and run the following: 
   g++ -O3 -lz -x c++ main_console.c nii_dicom.c nifti1_io_core.c nii_ortho.c nii_dicom_batch.c untgz.c -s -arch i386 -o dcm2niix32

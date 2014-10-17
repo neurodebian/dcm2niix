@@ -10,7 +10,7 @@
 extern "C" {
 #endif
     
-#define kDCMvers "4AUGUST2014"
+#define kDCMvers "11Oct2014"
 static const int kMaxDTIv = 4000;
 #define kDICOMStr  31
 #define kMaxDTIv  4000
@@ -50,6 +50,7 @@ static const int kSliceOrientMosaicNegativeDeterminant = 4;
     unsigned char * nii_flipY(unsigned char* bImg, struct nifti_1_header *h);
     unsigned char * nii_flipZ(unsigned char* bImg, struct nifti_1_header *h);
     struct TDICOMdata  nii_readParRec (char * parname);
+    //void reportMat(struct nifti_1_header h);
     int headerDcm2Nii2(struct TDICOMdata d, struct TDICOMdata d2, struct nifti_1_header *h);
     unsigned char * nii_loadImgX(char* imgname, struct nifti_1_header *hdr, struct TDICOMdata dcm, bool iVaries);
     

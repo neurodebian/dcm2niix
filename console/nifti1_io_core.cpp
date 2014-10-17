@@ -150,8 +150,6 @@ mat44 nifti_dicom2mat(float orient[7], float patientPosition[4], float xyzMM[4])
         Q.m[1][2] = -Q.m[1][2];
         Q.m[2][2] = -Q.m[2][2];
     }
-
-    
     //next scale matrix
     LOAD_MAT33(diagVox, xyzMM[1],0.0l,0.0l, 0.0l,xyzMM[2],0.0l, 0.0l,0.0l, xyzMM[3]);
     Q = nifti_mat33_mul(Q,diagVox);

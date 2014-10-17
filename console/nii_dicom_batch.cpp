@@ -371,8 +371,10 @@ bool isSamePosition (struct TDICOMdata d, struct TDICOMdata d2){
 bool nii_SaveDTI(char pathoutname[],int nConvert, struct TDCMsort dcmSort[],struct TDICOMdata dcmList[], struct TDCMopts opts, int sliceDir) {
     //reports true if last volume is excluded (e.g. philip stores an ADC map)
     //to do: works with 3D mosaics and 4D files, must remove repeated volumes for 2D sequences....
+
     uint64_t indx0 = dcmSort[0].indx; //first volume
     int numDti = dcmList[indx0].CSA.numDti;
+
     if (numDti < 1) return false;
     if ((numDti < 3) && (nConvert < 3)) return false;
     if (numDti == 1) {//extract DTI from different slices
@@ -400,13 +402,20 @@ bool nii_SaveDTI(char pathoutname[],int nConvert, struct TDCMsort dcmSort[],stru
     bool bValueVaries = false;
     for (int i = 1; i < numDti; i++) //check if all bvalues match first volume
         if (dcmList[indx0].CSA.dtiV[i][0] != dcmList[indx0].CSA.dtiV[0][0]) bValueVaries = true;
-    if (!bValueVaries) return false;
+    if (!bValueVaries) {
+        for (int i = 1; i < numDti; i++)
+                printf("bxyz %g %g %g %g\n",dcmList[indx0].CSA.dtiV[i][0],dcmList[indx0].CSA.dtiV[i][1],dcmList[indx0].CSA.dtiV[i][2],dcmList[indx0].CSA.dtiV[i][3]);
+        printf("Error: only one B-value reported for all volumes: %g\n",dcmList[indx0].CSA.dtiV[0][0]);
+        return false;
+    }
+        
     int firstB0 = -1;
     for (int i = 0; i < numDti; i++) //check if all bvalues match first volume
         if (isSameFloat(dcmList[indx0].CSA.dtiV[i][0],0) ) {
             firstB0 = i;
             break;
         }
+    //printf("2015ALPHA %d -> %d\n",numDti, nConvert);
     #ifdef myUseCOut
     if (firstB0 < 0) 
     	std::cout<<"Warning: this diffusion series does not have a B0 (reference) volume"<<std::endl;
@@ -951,6 +960,8 @@ int saveDcm2Nii(int nConvert, struct TDCMsort dcmSort[],struct TDICOMdata dcmLis
                 dx = intersliceDistance(dcmList[dcmSort[0].indx],dcmList[dcmSort[1].indx]);
                 //printf("swizzling 3rd and 4th dimensions (XYTZ -> XYZT), assuming interslice distance is %f\n",dx);
             }
+            dcmList[dcmSort[0].indx].xyzMM[3] = dx; //16Sept2014 : correct DICOM for true distance between slice centers:
+            // e.g. MCBI Siemens ToF 0018:0088 reports 16mm SpacingBetweenSlices, but actually 0.5mm
             if (dx > 0) hdr0.pixdim[3] = dx;
         } else if (hdr0.dim[4] < 2) {
             hdr0.dim[4] = nConvert;
@@ -977,6 +988,7 @@ int saveDcm2Nii(int nConvert, struct TDCMsort dcmSort[],struct TDICOMdata dcmLis
             free(img);
         }
     }
+
     //printf("Mango %zd\n", (imgsz* nConvert)); return 0;
     char pathoutname[2048] = {""};
     if (nii_createFilename(dcmList[dcmSort[0].indx], pathoutname, opts) == EXIT_FAILURE) return EXIT_FAILURE;
@@ -1167,20 +1179,19 @@ int convert_parRec(struct TDCMopts opts) {
     struct TDCMsort dcmSort[1];
     dcmSort[0].indx = 0;
     saveDcm2Nii(1, dcmSort, dcmList, &nameList, opts);
-    free(dcmList);//if (nConvertTotal == 0) 
+    free(dcmList);//if (nConvertTotal == 0)
+    if (nameList.numItems < 1) {
      #ifdef myUseCOut
-    	std::cout<<"No valid DICOM files were found"<<std::endl;
+    	std::cout<<"No valid PAR/REC files were found"<<std::endl;
 		#else
-		printf("No valid DICOM files were found");
+		printf("No valid PAR/REC files were found\n");
 		#endif
+    }
     if (nameList.numItems > 0)
         for (int i = 0; i < nameList.numItems; i++)
             free(nameList.str[i]);
     free(nameList.str);
-    /*struct nifti_1_header hdr;
-     headerDcm2Nii(d, &hdr);
-     unsigned char * img = nii_loadImgX(opts.indir, &hdr, d, false);
-     free(img);*/
+
     return EXIT_SUCCESS;
 } //convert_parRec()
 
@@ -1200,6 +1211,8 @@ int nii_loadDir (struct TDCMopts* opts) {
     #else
     printf("Version %s\n",kDCMvers);
     #endif
+
+    
     char indir[512];
     strcpy(indir,opts->indir);
     bool isFile = is_fileNotDir(opts->indir);
@@ -1223,11 +1236,11 @@ int nii_loadDir (struct TDCMopts* opts) {
          #endif
         #endif
     }*/
-    
     if (isFile && ((isExt(indir, ".par")) || (isExt(indir, ".rec"))) ) {
         strcpy(opts->indir, indir); //set to original file name, not path
         return convert_parRec(*opts);
     }
+
     getFileName(opts->indirParent, opts->indir);
     struct TSearchList nameList;
     nameList.numItems = 0;

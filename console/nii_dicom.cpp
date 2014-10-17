@@ -14,17 +14,14 @@
 #include <stdint.h>
 #include "nifti1_io_core.h"
 #ifdef myUseCOut
- #include <iostream>
+#include <iostream>
 #endif
 
 #ifndef M_PI
 #define M_PI           3.14159265358979323846
 #endif
-//#define myVerboseDicomRead
 
 #ifdef MY_DEBUG
-
-
 float deFuzz(float v) {
     if (fabs(v) < 0.00001)
         return 0;
@@ -32,14 +29,6 @@ float deFuzz(float v) {
         return v;
     
 }
-void reportMat44(char *str, mat44 A) {
-    printf("%s = [%g %g %g %g; %g %g %g %g; %g %g %g %g; 0 0 0 1]\n",str,
-           deFuzz(A.m[0][0]),deFuzz(A.m[0][1]),deFuzz(A.m[0][2]),deFuzz(A.m[0][3]),
-           deFuzz(A.m[1][0]),deFuzz(A.m[1][1]),deFuzz(A.m[1][2]),deFuzz(A.m[1][3]),
-           deFuzz(A.m[2][0]),deFuzz(A.m[2][1]),deFuzz(A.m[2][2]),deFuzz(A.m[2][3]));
-}
-
-
 
 void reportMat33(char *str, mat33 A) {
     printf("%s = [%g %g %g ; %g %g %g; %g %g %g ]\n",str,
@@ -47,7 +36,15 @@ void reportMat33(char *str, mat33 A) {
            deFuzz(A.m[1][0]),deFuzz(A.m[1][1]),deFuzz(A.m[1][2]),
            deFuzz(A.m[2][0]),deFuzz(A.m[2][1]),deFuzz(A.m[2][2]));
 }
+
+void reportMat44(char *str, mat44 A) {
+    printf("%s = [%g %g %g %g; %g %g %g %g; %g %g %g %g; 0 0 0 1]\n",str,
+           deFuzz(A.m[0][0]),deFuzz(A.m[0][1]),deFuzz(A.m[0][2]),deFuzz(A.m[0][3]),
+           deFuzz(A.m[1][0]),deFuzz(A.m[1][1]),deFuzz(A.m[1][2]),deFuzz(A.m[1][3]),
+           deFuzz(A.m[2][0]),deFuzz(A.m[2][1]),deFuzz(A.m[2][2]),deFuzz(A.m[2][3]));
+}
 #endif
+
 
 int verify_slice_dir (struct TDICOMdata d, struct TDICOMdata d2, struct nifti_1_header *h, mat44 *R){
     //returns slice direction: 1=sag,2=coronal,3=axial, -= flipped
@@ -129,8 +126,9 @@ void setQSForm(struct nifti_1_header *h, mat44 Q44) {
 
 int headerDcm2NiiSForm(struct TDICOMdata d, struct TDICOMdata d2,  struct nifti_1_header *h) { //fill header s and q form
     //see http://nifti.nimh.nih.gov/pub/dist/src/niftilib/nifti1_io.c
-    //returns sliceDirection: 0=unknown,1=sag,2=coro,3=axial,-=reversed slices 
-    int sliceDir = 0; 
+    //returns sliceDirection: 0=unknown,1=sag,2=coro,3=axial,-=reversed slices
+    //
+    int sliceDir = 0;
     if (h->dim[3] < 2) return sliceDir; //don't care direction for single slice
     h->sform_code = NIFTI_XFORM_UNKNOWN;
     h->qform_code = NIFTI_XFORM_UNKNOWN;
@@ -139,7 +137,6 @@ int headerDcm2NiiSForm(struct TDICOMdata d, struct TDICOMdata d2,  struct nifti_
         if (d.orient[i] != 0.0) isOK = true;
     if (!isOK) return sliceDir;
     mat44 Q44 = nifti_dicom2mat(d.orient, d.patientPosition, d.xyzMM);
-
     if (d.CSA.mosaicSlices > 1) {
         double nRowCol = ceil(sqrt(d.CSA.mosaicSlices));
         double lFactorX = (d.xyzDim[1] -(d.xyzDim[1]/nRowCol)   )/2.0;
@@ -147,20 +144,20 @@ int headerDcm2NiiSForm(struct TDICOMdata d, struct TDICOMdata d2,  struct nifti_
         Q44.m[0][3] =(Q44.m[0][0]*lFactorX)+(Q44.m[0][1]*lFactorY)+Q44.m[0][3];
         Q44.m[1][3] =(Q44.m[1][0]*lFactorX)+(Q44.m[1][1]*lFactorY)+Q44.m[1][3];
         Q44.m[2][3] =(Q44.m[2][0]*lFactorX)+(Q44.m[2][1]*lFactorY)+Q44.m[2][3];
-
+        
         /* #ifdef obsolete_mosaic_flip
-        double val = d.xyzDim[2]/nRowCol; //obsolete!!!
-        //Q44 now equals 'dicom_to_patient' in spm_dicom_convert
-        mat44 patient_to_tal, analyze_to_dicom;
-        LOAD_MAT44(patient_to_tal, -1.0l,0.0l,0.0l,0.0l, 0.0l,-1.0l,0.0l,0.0l, 0.0l,0.0l,1.0l,0.0l);
-        LOAD_MAT44(analyze_to_dicom, 1.0l,0.0l,0.0l,-1.0l, 0.0l,-1.0l,0.0l,val, 0.0l,0.0l,1.0l,-1.0l);
-        Q44 = nifti_mat44_mul(patient_to_tal,Q44);
-        Q44 = nifti_mat44_mul(Q44,analyze_to_dicom);
-        //Q44 now equals 'mat' in spm_dicom_convert
-        //subasgn.m in SPM5 translates by one voxel...
-        LOAD_MAT44(analyze_to_dicom, 1.0l,0.0l,0.0l,1.0l, 0.0l,1.0l,0.0l,1.0l, 0.0l,0.0l,1.0l,1.0l);
-        Q44 = nifti_mat44_mul(Q44,analyze_to_dicom);
-        #else */
+         double val = d.xyzDim[2]/nRowCol; //obsolete!!!
+         //Q44 now equals 'dicom_to_patient' in spm_dicom_convert
+         mat44 patient_to_tal, analyze_to_dicom;
+         LOAD_MAT44(patient_to_tal, -1.0l,0.0l,0.0l,0.0l, 0.0l,-1.0l,0.0l,0.0l, 0.0l,0.0l,1.0l,0.0l);
+         LOAD_MAT44(analyze_to_dicom, 1.0l,0.0l,0.0l,-1.0l, 0.0l,-1.0l,0.0l,val, 0.0l,0.0l,1.0l,-1.0l);
+         Q44 = nifti_mat44_mul(patient_to_tal,Q44);
+         Q44 = nifti_mat44_mul(Q44,analyze_to_dicom);
+         //Q44 now equals 'mat' in spm_dicom_convert
+         //subasgn.m in SPM5 translates by one voxel...
+         LOAD_MAT44(analyze_to_dicom, 1.0l,0.0l,0.0l,1.0l, 0.0l,1.0l,0.0l,1.0l, 0.0l,0.0l,1.0l,1.0l);
+         Q44 = nifti_mat44_mul(Q44,analyze_to_dicom);
+         #else */
         for (int c=0; c<2; c++)
             for (int r=0; r<4; r++)
                 Q44.m[c][r] = -Q44.m[c][r];
@@ -213,7 +210,7 @@ int headerDcm2Nii2(struct TDICOMdata d, struct TDICOMdata d2, struct nifti_1_hea
     //x strlcpy(h->descrip,txt,80);
     snprintf(h->descrip,80, "%s",txt);
     if (strlen(d.imageComments) > 0)
-	snprintf(h->aux_file,24,"%s",d.imageComments);
+        snprintf(h->aux_file,24,"%s",d.imageComments);
     return headerDcm2NiiSForm(d,d2, h);
 } //headerDcm2Nii2()
 
@@ -226,10 +223,10 @@ int dcmStrLen (int len) {
 
 struct TDICOMdata clear_dicom_data() {
     struct TDICOMdata d;
-
+    
     d.locationsInAcquisition = 0;
     for (int i=0; i < 4; i++) {
-        for (int n=0; kMaxDTIv < 4; n++)
+        for (int n=0; n < kMaxDTIv; n++)
             d.CSA.dtiV[n][i] = 0;
         d.patientPosition[i] = NAN;
         //d.patientPosition2nd[i] = NAN; //used to distinguish XYZT vs XYTZ for Philips 4D
@@ -245,16 +242,16 @@ struct TDICOMdata clear_dicom_data() {
             d.isHasPhase = false;
             d.isHasMagnitude = false;
             d.sliceOrient = kSliceOrientUnknown;
-
+            
             //strcpy(d.sliceOrient,"\n");
             strcpy(d.patientName, "John_Doe");
             strcpy(d.patientID, "ID123");
             strcpy(d.imageComments, "imgComments");
             strcpy(d.studyDate, "1/1/1977");
             strcpy(d.studyTime, "11:11:11");
-    d.dateTime = (double)19770703150928.0;
-    d.acquisitionTime = 0.0f;
-    strcpy(d.protocolName, "MPRAGE");
+            d.dateTime = (double)19770703150928.0;
+            d.acquisitionTime = 0.0f;
+            strcpy(d.protocolName, "MPRAGE");
             d.manufacturer = kMANUFACTURER_UNKNOWN;
             d.isPlanarRGB = false;
             d.lastScanLoc = NAN;
@@ -288,7 +285,7 @@ struct TDICOMdata clear_dicom_data() {
 } //clear_dicom_data()
 
 void dcmStrDigitsOnly(char* lStr) {
- //e.g. change "H11" to " 11"
+    //e.g. change "H11" to " 11"
     size_t len = strlen(lStr);
     if (len < 1) return;
     for (int i = 0; i < len; i++)
@@ -307,7 +304,7 @@ void dcmStr(int lLength, unsigned char lBuffer[], char* lOut) {
     memcpy(cString, (char*)&lBuffer[0], lLength);
     //memcpy(cString, test, lLength);
     for (int i = 0; i < lLength; i++)
-            if (cString[i]==' ') cString[i] = '_';
+        if (cString[i]==' ') cString[i] = '_';
     int len = 1;
     for (int i = 1; i < lLength; i++) { //remove repeated "_"
         if ((cString[i-1]!='_') || (cString[i]!='_')) {
@@ -437,72 +434,72 @@ int readCSAImageHeader(unsigned char *buff, int lLength, struct TCSAdata *CSA, b
         if (tagCSA.nitems > 0) {
             if (strcmp(tagCSA.name, "NumberOfImagesInMosaic") == 0)
                 CSA->mosaicSlices = round(csaMultiFloat (&buff[lPos], 1,lFloats, &itemsOK));
-             else if (strcmp(tagCSA.name, "B_value") == 0) {
-                 CSA->dtiV[0][0] = csaMultiFloat (&buff[lPos], 1,lFloats, &itemsOK);
-                 CSA->numDti = 1; //triggered by b-value, as B0 images do not have DiffusionGradientDirection tag
-             }
-             else if ((strcmp(tagCSA.name, "DiffusionGradientDirection") == 0) && (tagCSA.nitems > 2)){
-                 CSA->dtiV[0][1] = csaMultiFloat (&buff[lPos], 3,lFloats, &itemsOK);
-                 CSA->dtiV[0][2] = lFloats[2];
-                 CSA->dtiV[0][3] = lFloats[3];
-                 if (isVerbose)
-                     printf("DiffusionGradientDirection %f %f %f\n",lFloats[1],lFloats[2],lFloats[3]);
-             } else if ((strcmp(tagCSA.name, "SliceNormalVector") == 0) && (tagCSA.nitems > 2)){
-                 CSA->sliceNormV[1] = csaMultiFloat (&buff[lPos], 3,lFloats, &itemsOK);
-                 CSA->sliceNormV[2] = lFloats[2];
-                 CSA->sliceNormV[3] = lFloats[3];
-                 if (isVerbose)
+            else if (strcmp(tagCSA.name, "B_value") == 0) {
+                CSA->dtiV[0][0] = csaMultiFloat (&buff[lPos], 1,lFloats, &itemsOK);
+                CSA->numDti = 1; //triggered by b-value, as B0 images do not have DiffusionGradientDirection tag
+            }
+            else if ((strcmp(tagCSA.name, "DiffusionGradientDirection") == 0) && (tagCSA.nitems > 2)){
+                CSA->dtiV[0][1] = csaMultiFloat (&buff[lPos], 3,lFloats, &itemsOK);
+                CSA->dtiV[0][2] = lFloats[2];
+                CSA->dtiV[0][3] = lFloats[3];
+                if (isVerbose)
+                    printf("DiffusionGradientDirection %f %f %f\n",lFloats[1],lFloats[2],lFloats[3]);
+            } else if ((strcmp(tagCSA.name, "SliceNormalVector") == 0) && (tagCSA.nitems > 2)){
+                CSA->sliceNormV[1] = csaMultiFloat (&buff[lPos], 3,lFloats, &itemsOK);
+                CSA->sliceNormV[2] = lFloats[2];
+                CSA->sliceNormV[3] = lFloats[3];
+                if (isVerbose)
                     printf("SliceNormalVector %f %f %f\n",CSA->sliceNormV[1],CSA->sliceNormV[2],CSA->sliceNormV[3]);
-             } else if (strcmp(tagCSA.name, "SliceMeasurementDuration") == 0)
-                 CSA->sliceMeasurementDuration = csaMultiFloat (&buff[lPos], 3,lFloats, &itemsOK);
-             else if (strcmp(tagCSA.name, "BandwidthPerPixelPhaseEncode") == 0)
-                 CSA->bandwidthPerPixelPhaseEncode = csaMultiFloat (&buff[lPos], 3,lFloats, &itemsOK);
-             else if ((strcmp(tagCSA.name, "MosaicRefAcqTimes") == 0) && (tagCSA.nitems > 3)  ){
-                 float sliceTimes[tagCSA.nitems+1];
-                 csaMultiFloat (&buff[lPos], tagCSA.nitems,sliceTimes, &itemsOK);
-                 float minTimeIndex, minTimeValue, timeValue1;
-                 CSA->multiBandFactor = 1;
-                 timeValue1 = sliceTimes[1];
-                 minTimeIndex = 1;
-                 minTimeValue= sliceTimes[1];
-                 for (int z = 2; z <= itemsOK; z++) { //find index and value of fastest time
-                     if (sliceTimes[z] < minTimeValue) {
-                         minTimeValue = sliceTimes[z];
-                         minTimeIndex = z;
-                     }
-                     if (sliceTimes[z] == timeValue1) CSA->multiBandFactor++;
-                 }
-                 if (minTimeIndex == 2)
-                     CSA->sliceOrder = NIFTI_SLICE_ALT_INC2;// e.g. 3,1,4,2
-                 else if (minTimeIndex == (itemsOK-1))
-                     CSA->sliceOrder = NIFTI_SLICE_ALT_DEC2;// e.g. 4,3,2,1
-                 else if ((minTimeIndex == 1) && (sliceTimes[2] < sliceTimes[3]))
-                     CSA->sliceOrder = NIFTI_SLICE_SEQ_INC;
-                 else if ((minTimeIndex == 1) && (sliceTimes[2] > sliceTimes[3]))
-                     CSA->sliceOrder = NIFTI_SLICE_ALT_INC;
-                 else if ((minTimeIndex == itemsOK) && (sliceTimes[itemsOK-1] < sliceTimes[itemsOK]))
-                     CSA->sliceOrder = NIFTI_SLICE_SEQ_DEC;
-                 else if ((minTimeIndex == itemsOK) && (sliceTimes[itemsOK-1] > sliceTimes[itemsOK-2]))
-                     CSA->sliceOrder = NIFTI_SLICE_ALT_DEC;
-                 else {
-                     /*NSMutableArray *sliceTimesNS = [NSMutableArray arrayWithCapacity:tagCSA.nitems];
-                      for (int z = 1; z <= itemsOK; z++)
-                      [sliceTimesNS addObject:[NSNumber numberWithFloat:sliceTimes[z]]];
-                      NSLog(@" Warning: unable to determine slice order for %lu slice mosaic: %@",(unsigned long)[sliceTimesNS count],sliceTimesNS );
-                      */
-                     printf("Warning: unable to determine slice order from CSA tag MosaicRefAcqTimes\n");
-                 }
-             } else if (strcmp(tagCSA.name, "ProtocolSliceNumber") == 0)
-                 CSA->protocolSliceNumber1 = round (csaMultiFloat (&buff[lPos], 1,lFloats, &itemsOK));
-             else if (strcmp(tagCSA.name, "PhaseEncodingDirectionPositive") == 0)
-                 CSA->phaseEncodingDirectionPositive = round (csaMultiFloat (&buff[lPos], 1,lFloats, &itemsOK));
+            } else if (strcmp(tagCSA.name, "SliceMeasurementDuration") == 0)
+                CSA->sliceMeasurementDuration = csaMultiFloat (&buff[lPos], 3,lFloats, &itemsOK);
+            else if (strcmp(tagCSA.name, "BandwidthPerPixelPhaseEncode") == 0)
+                CSA->bandwidthPerPixelPhaseEncode = csaMultiFloat (&buff[lPos], 3,lFloats, &itemsOK);
+            else if ((strcmp(tagCSA.name, "MosaicRefAcqTimes") == 0) && (tagCSA.nitems > 3)  ){
+                float sliceTimes[tagCSA.nitems+1];
+                csaMultiFloat (&buff[lPos], tagCSA.nitems,sliceTimes, &itemsOK);
+                float minTimeIndex, minTimeValue, timeValue1;
+                CSA->multiBandFactor = 1;
+                timeValue1 = sliceTimes[1];
+                minTimeIndex = 1;
+                minTimeValue= sliceTimes[1];
+                for (int z = 2; z <= itemsOK; z++) { //find index and value of fastest time
+                    if (sliceTimes[z] < minTimeValue) {
+                        minTimeValue = sliceTimes[z];
+                        minTimeIndex = z;
+                    }
+                    if (sliceTimes[z] == timeValue1) CSA->multiBandFactor++;
+                }
+                if (minTimeIndex == 2)
+                    CSA->sliceOrder = NIFTI_SLICE_ALT_INC2;// e.g. 3,1,4,2
+                else if (minTimeIndex == (itemsOK-1))
+                    CSA->sliceOrder = NIFTI_SLICE_ALT_DEC2;// e.g. 4,3,2,1
+                else if ((minTimeIndex == 1) && (sliceTimes[2] < sliceTimes[3]))
+                    CSA->sliceOrder = NIFTI_SLICE_SEQ_INC;
+                else if ((minTimeIndex == 1) && (sliceTimes[2] > sliceTimes[3]))
+                    CSA->sliceOrder = NIFTI_SLICE_ALT_INC;
+                else if ((minTimeIndex == itemsOK) && (sliceTimes[itemsOK-1] < sliceTimes[itemsOK]))
+                    CSA->sliceOrder = NIFTI_SLICE_SEQ_DEC;
+                else if ((minTimeIndex == itemsOK) && (sliceTimes[itemsOK-1] > sliceTimes[itemsOK-2]))
+                    CSA->sliceOrder = NIFTI_SLICE_ALT_DEC;
+                else {
+                    /*NSMutableArray *sliceTimesNS = [NSMutableArray arrayWithCapacity:tagCSA.nitems];
+                     for (int z = 1; z <= itemsOK; z++)
+                     [sliceTimesNS addObject:[NSNumber numberWithFloat:sliceTimes[z]]];
+                     NSLog(@" Warning: unable to determine slice order for %lu slice mosaic: %@",(unsigned long)[sliceTimesNS count],sliceTimesNS );
+                     */
+                    printf("Warning: unable to determine slice order from CSA tag MosaicRefAcqTimes\n");
+                }
+            } else if (strcmp(tagCSA.name, "ProtocolSliceNumber") == 0)
+                CSA->protocolSliceNumber1 = round (csaMultiFloat (&buff[lPos], 1,lFloats, &itemsOK));
+            else if (strcmp(tagCSA.name, "PhaseEncodingDirectionPositive") == 0)
+                CSA->phaseEncodingDirectionPositive = round (csaMultiFloat (&buff[lPos], 1,lFloats, &itemsOK));
             /*if (strcmp(tagCSA.name, "SlicePosition_PCS") == 0) {
              float f =  (csaMultiFloat (&buff[lPos], 1,lFloats, &itemsOK));
              for (int k = 1; k <= tagCSA.nitems; k++)
              printf("PCS %d = %f\n",k, lFloats[k]);
              }
              else {
-                 printf("unused CSA tag %s with %d items\n",tagCSA.name, tagCSA.nitems);
+             printf("unused CSA tag %s with %d items\n",tagCSA.name, tagCSA.nitems);
              }*/
             for (int lI = 1; lI <= tagCSA.nitems; lI++) {
                 memcpy(&itemCSA, &buff[lPos], sizeof(itemCSA));
@@ -527,7 +524,7 @@ void dcmMultiFloat (int lByteLength, char lBuffer[], int lnFloats, float *lFloat
         if ((lBuffer[i] >= '0') && (lBuffer[i] <= '9')) isOK = true;
         if ((isOK) && ((i == (lByteLength)) || (lBuffer[i] == '/')  || (lBuffer[i] == ' ')  || (lBuffer[i] == '\\') )){
             //x strlcpy(temp,&cString[lStart],i-lStart+1);
-	    snprintf(temp,i-lStart+1,"%s",&cString[lStart]);
+            snprintf(temp,i-lStart+1,"%s",&cString[lStart]);
             //printf("dcmMultiFloat %s\n",temp);
             if (f < lnFloats) {
                 f ++;
@@ -549,12 +546,12 @@ float dcmStrFloat (int lByteLength, unsigned char lBuffer[]) { //read float stor
 
 /*
  void dcmStrReport (int lByteLength, char lBuffer[]) {//print value at location
-    char cString[lByteLength+1];
-    memcpy(cString, (char*)&lBuffer[0], lByteLength);
-    cString[lByteLength] = 0; //null terminate
-    printf("%d dcmStrReport '%s'\n",lByteLength, cString);
-} //dcmStrReport
-*/
+ char cString[lByteLength+1];
+ memcpy(cString, (char*)&lBuffer[0], lByteLength);
+ cString[lByteLength] = 0; //null terminate
+ printf("%d dcmStrReport '%s'\n",lByteLength, cString);
+ } //dcmStrReport
+ */
 
 int headerDcm2Nii(struct TDICOMdata d, struct nifti_1_header *h) {
     //printf("bytes %dx%dx%d %d, %d\n",d.XYZdim[1],d.XYZdim[2],d.XYZdim[3], d.Allocbits_per_pixel, d.samplesPerPixel);
@@ -650,7 +647,7 @@ ivec3 setVec3i(int x, int y, int z)
     return v;
 } //setVec3i()
 
-mat33 nifti_mat33_reorder_cols( mat33 m, ivec3 v ) { 
+mat33 nifti_mat33_reorder_cols( mat33 m, ivec3 v ) {
     // matlab equivalent ret = m(:, v); where v is 1,2,3 [INDEXED FROM ONE!!!!]
     mat33 ret;
     for (int r=0; r<3; r++) {
@@ -661,12 +658,12 @@ mat33 nifti_mat33_reorder_cols( mat33 m, ivec3 v ) {
 } //nifti_mat33_reorder_cols()
 
 /*bool isExt (char *file_name, const char* ext) {
-    char *p_extension;
-    if((p_extension = strrchr(file_name,'.')) != NULL )
-        if(strcmp(p_extension,ext) == 0) return true;
-    return false;
-    
-}*/
+ char *p_extension;
+ if((p_extension = strrchr(file_name,'.')) != NULL )
+ if(strcmp(p_extension,ext) == 0) return true;
+ return false;
+ 
+ }*/
 
 void changeExt (char *file_name, const char* ext) {
     char *p_extension;
@@ -715,6 +712,9 @@ struct TDICOMdata  nii_readParRec (char * parname) {
 #define	kv3	46
 #define	kASL	48
     char buff[LINESZ];
+    bool ADCwarning = false;
+    for (int n=0; kMaxDTIv < 4; n++)
+        d.CSA.dtiV[n][0] = -1; //set to impossible value to detect re-usage by ADC map
     int parVers = 0;
     int nCols = 26;
     int slice = 0;
@@ -813,7 +813,7 @@ struct TDICOMdata  nii_readParRec (char * parname) {
 #else
             printf("Error: PAR files should have 'CLINICAL TRYOUT' line with a version from 2.0-4.2: %s\n", parname);
 #endif
-             return d;
+            return d;
         }
         for (int i = 0; i < nCols; i++)
             cols[i] = strtof(p, &p); // p+1 skip comma, read a float
@@ -860,12 +860,20 @@ struct TDICOMdata  nii_readParRec (char * parname) {
         if (cols[kImageType] != 0) d.isHasPhase = true;
         if (cols[kGradientNumber] > 0) {
             int dir = cols[kGradientNumber];
+            if ((cols[kbval] > 0.0) && (cols[kv1] == 0.0) && (cols[kv1] == 0.0) && (cols[kv1] == 0.0) ) {
+                if (d.CSA.dtiV[dir-1][0] >= 0) dir = dir + 1; //Philips often stores an ADC map along with B0 and weighted images, unfortunately they give it the same kGradientNumber as the B0! (seen in PAR V4.2)
+                //the logic here is that IF the gradient was previously used we increment the gradient number. This should provide compatibility when Philips fixes this bug
+                //it seems like the ADC is always saved as the final volume, so this solution SHOULD be foolproof.
+                ADCwarning = true;
+            }
             if (dir > d.CSA.numDti) d.CSA.numDti = dir;
+
             if (cols[dir] <= kMaxDTIv) {
                 d.CSA.dtiV[dir-1][0] = cols[kbval];
                 d.CSA.dtiV[dir-1][1] = cols[kv1];
                 d.CSA.dtiV[dir-1][2] = cols[kv2];
                 d.CSA.dtiV[dir-1][3] = cols[kv3];
+
             } //save DTI direction
         } //if DTI directions
         //printf("%f %f %lu\n",cols[9],cols[kGradientNumber], strlen(buff))
@@ -880,26 +888,29 @@ struct TDICOMdata  nii_readParRec (char * parname) {
 #ifdef myUseCOut
     if (isIntenScaleVaries)
         std::cout<<"Warning: intensity slope/intercept varies between slices! [solution: user dcm2nii instead]" <<std::endl;
-        
+    
     if (!isIndexSequential)
         std::cout<<"Warning: slice order not saved to disk sequentially! [solution: user dcm2nii instead]" <<std::endl;
-        printf("Warning: slice order not saved to disk sequentially! [solution: user dcm2nii instead]\n");
+    printf("Warning: slice order not saved to disk sequentially! [solution: user dcm2nii instead]\n");
     std::cout<<"Done reading PAR header version "<< (float)parVers/10<<" with "<< d.CSA.numDti << "DTI directions"<<std::endl;
 #else
-    if (isIntenScaleVaries)
-        printf("Warning: intensity slope/intercept varies between slices! [solution: user dcm2nii instead]\n");
-    if (!isIndexSequential)
-        printf("Warning: slice order not saved to disk sequentially! [solution: user dcm2nii instead]\n");
-    printf("Done reading PAR header version %.1f, with %d DTI directions\n", (float)parVers/10, d.CSA.numDti);
-#endif
+    if (ADCwarning)
+        printf("Warning: PAR/REC dataset includes an ADC map that could disrupt analysis. Please remove volume and ensure vectors are reported correctly\n");
     
-    //see Xiangrui Li 's dicm2nii (also BSD license)
-    // http://www.mathworks.com/matlabcentral/fileexchange/42997-dicom-to-nifti-converter
-    // Rotation order and signs are figured out by try and err, not 100% sure
-    float d2r = M_PI/180;
-    vec3 ca = setVec3(cos(d.angulation[1]*d2r),cos(d.angulation[2]*d2r),cos(d.angulation[3]*d2r));
-    vec3 sa = setVec3(sin(d.angulation[1]*d2r),sin(d.angulation[2]*d2r),sin(d.angulation[3]*d2r));
-    mat33 rx,ry,rz;
+    if (isIntenScaleVaries)
+       printf("Warning: intensity slope/intercept varies between slices! [solution: user dcm2nii instead]\n");
+        if (!isIndexSequential)
+            printf("Warning: slice order not saved to disk sequentially! [solution: user dcm2nii instead]\n");
+            printf("Done reading PAR header version %.1f, with %d DTI directions\n", (float)parVers/10, d.CSA.numDti);
+#endif
+            
+            //see Xiangrui Li 's dicm2nii (also BSD license)
+            // http://www.mathworks.com/matlabcentral/fileexchange/42997-dicom-to-nifti-converter
+            // Rotation order and signs are figured out by try and err, not 100% sure
+            float d2r = M_PI/180;
+            vec3 ca = setVec3(cos(d.angulation[1]*d2r),cos(d.angulation[2]*d2r),cos(d.angulation[3]*d2r));
+            vec3 sa = setVec3(sin(d.angulation[1]*d2r),sin(d.angulation[2]*d2r),sin(d.angulation[3]*d2r));
+            mat33 rx,ry,rz;
     LOAD_MAT33(rx,1.0f, 0.0f, 0.0f, 0.0f, ca.v[0], -sa.v[0], 0.0f, sa.v[0], ca.v[0]);
     LOAD_MAT33(ry, ca.v[1], 0.0f, sa.v[1], 0.0f, 1.0f, 0.0f, -sa.v[1], 0.0f, ca.v[1]);
     LOAD_MAT33(rz, ca.v[2], -sa.v[2], 0.0f, sa.v[2], ca.v[2], 0.0f, 0.0f, 0.0f, 1.0f);
@@ -1036,12 +1047,12 @@ unsigned char * nii_flipImgY(unsigned char* bImg, struct nifti_1_header *hdr){
         if (hdr->dim[i] > 1) dim3to7 = dim3to7 * hdr->dim[i];
     size_t lineBytes = hdr->dim[1] * hdr->bitpix/8;
     if ((hdr->datatype == DT_RGB24) && (hdr->bitpix == 24)) {
-        lineBytes = hdr->dim[1]; 
+        lineBytes = hdr->dim[1];
         dim3to7 = dim3to7 * 3;
     } //rgb data saved planar (RRR..RGGGG..GBBB..B
     
     //printf("smoking gun %d %d\n",hdr->dim[3],hdr->dim[4]); return bImg;
-
+    
     unsigned char line[lineBytes];
     size_t sliceBytes = hdr->dim[2] * lineBytes;
     int halfY = hdr->dim[2] / 2; //note truncated toward zero, so halfY=2 regardless of 4 or 5 columns
@@ -1087,7 +1098,7 @@ unsigned char * nii_flipImgZ(unsigned char* bImg, struct nifti_1_header *hdr){
 } //nii_flipImgZ()
 
 unsigned char * nii_flipZ(unsigned char* bImg, struct nifti_1_header *h){
-//flip slice order
+    //flip slice order
     if (h->dim[3] < 2) return bImg;
     mat33 s;
     mat44 Q44;
@@ -1136,7 +1147,10 @@ unsigned char * nii_flipY(unsigned char* bImg, struct nifti_1_header *h){
 unsigned char * nii_loadImgCore(char* imgname, struct nifti_1_header hdr) {
     size_t imgsz = nii_ImgBytes(hdr);
     FILE *file = fopen(imgname , "rb");
-	if (!file)  return NULL;
+	if (!file) {
+         printf("Error: unable to open %s\n", imgname);
+         return NULL;
+    }
 	fseek(file, 0, SEEK_END);
 	long long fileLen=ftell(file);
     if (fileLen < (imgsz+hdr.vox_offset)) return NULL;
@@ -1227,14 +1241,14 @@ unsigned char * nii_XYTZ_XYZT(unsigned char* bImg, struct nifti_1_header *hdr, i
         std::cout<<"Error: patient position repeats "<<seqRepeats<<"  times, but this does not evenly divide number of volumes: "<<  dim4to7 <<std::endl;
         seqRepeats = 1;
     }
-
+    
 #else
     printf("Converting XYTZ to XYZT with %d slices (Z) and %d volumes (T).\n",hdr->dim[3], dim4to7);
     if ((dim4to7 % seqRepeats) != 0) {
         printf("Error: patient position repeats %d times, but this does not evenly divide number of volumes (%d)", seqRepeats,dim4to7);
         seqRepeats = 1;
     }
-
+    
 #endif
     uint64_t typeRepeats = dim4to7 / seqRepeats;
     uint64_t sliceBytes = hdr->dim[1]*hdr->dim[2]*hdr->bitpix/8;
@@ -1274,22 +1288,23 @@ unsigned char * nii_byteswap(unsigned char *img, struct nifti_1_header *hdr){
 
 unsigned char * nii_loadImgX(char* imgname, struct nifti_1_header *hdr, struct TDICOMdata dcm, bool iVaries) {
     //provided with a filename (imgname) and DICOM header (dcm), creates NIfTI header (hdr) and img
+
     if (headerDcm2Nii(dcm, hdr) == EXIT_FAILURE) return NULL;
     unsigned char * img = nii_loadImgCore(imgname, *hdr);
     if (img == NULL) return img;
-    #ifdef __BIG_ENDIAN__
+#ifdef __BIG_ENDIAN__
     if ((dcm.isLittleEndian) && (hdr->bitpix > 8))
         img = nii_byteswap(img, hdr);
-    #else
+#else
     if ((!dcm.isLittleEndian) && (hdr->bitpix > 8))
         img = nii_byteswap(img, hdr);
-    #endif
+#endif
     if (hdr->datatype ==DT_RGB24) img = nii_rgb2Planar(img, hdr, dcm.isPlanarRGB);//do this BEFORE Y-Flip, or RGB order can be flipped
     if (dcm.CSA.mosaicSlices > 1) {
         img = nii_demosaic(img, hdr, dcm.CSA.mosaicSlices, dcm.CSA.protocolSliceNumber1);
         /* we will do this in nii_dicom_batch #ifdef obsolete_mosaic_flip
-        img = nii_flipImgY(img, hdr);
-        #endif*/
+         img = nii_flipImgY(img, hdr);
+         #endif*/
     }
     if (iVaries) img = nii_iVaries(img, hdr);
     int nAcq = dcm.locationsInAcquisition;
@@ -1324,7 +1339,7 @@ struct TDICOMdata readDICOMv(char * fname, bool isVerbose) {
      	std::cout<<"File too small to be a DICOM image "<< fname <<std::endl;
 #else
         printf( "File too small to be a DICOM image %s\n", fname);
-#endif		
+#endif
 		return d;
 	}
 	fseek(file, 0, SEEK_SET);
@@ -1343,6 +1358,7 @@ struct TDICOMdata readDICOMv(char * fname, bool isVerbose) {
         return d;
     }
     //DEFINE DICOM TAGS
+#define  kUnused 0x0001+(0x0001 << 16 )
 #define  kStart 0x0002+(0x0000 << 16 )
 #define  kTransferSyntax 0x0002+(0x0010 << 16)
 #define  kStudyDate 0x0008+(0x0020 << 16 )
@@ -1362,7 +1378,7 @@ struct TDICOMdata readDICOMv(char * fname, bool isVerbose) {
 #define  kProtocolName  0x0018+(0x1030<< 16 )
 #define  kInPlanePhaseEncodingDirection  0x0018+(0x1312<< 16 ) //CS
 #define  kPatientOrient  0x0018+(0x5100<< 16 )    //0018,5100. patient orientation - 'HFS'
-//#define  kDiffusionBFactorSiemens  0x0019+(0x100C<< 16 ) //   0019;000C;SIEMENS MR HEADER  ;B_value                         ;1;IS;1
+    //#define  kDiffusionBFactorSiemens  0x0019+(0x100C<< 16 ) //   0019;000C;SIEMENS MR HEADER  ;B_value                         ;1;IS;1
 #define  kLastScanLoc  0x0019+(0x101B<< 16 )
 #define  kDiffusionDirectionGEX  0x0019+(0x10BB<< 16 ) //DS
 #define  kDiffusionDirectionGEY  0x0019+(0x10BC<< 16 ) //DS
@@ -1387,10 +1403,11 @@ struct TDICOMdata readDICOMv(char * fname, bool isVerbose) {
 #define  kSlope 0x0028+(0x1053 << 16 )
 #define  kGeiisFlag 0x0029+(0x0010 << 16 ) //warn user if dreaded GEIIS was used to process image
 #define  kCSAImageHeaderInfo  0x0029+(0x1010 << 16 )
-//#define  kObjectGraphics  0x0029+(0x1210 << 16 )    //0029,1210 syngoPlatformOOGInfo Object Oriented Graphics
+    //#define  kObjectGraphics  0x0029+(0x1210 << 16 )    //0029,1210 syngoPlatformOOGInfo Object Oriented Graphics
 #define  kDiffusionBFactorGE  0x0043+(0x1039 << 16 ) //IS dicm2nii's SlopInt_6_9
 #define  kCoilSiemens  0x0051+(0x100F << 16 )
 #define  kLocationsInAcquisition  0x0054+(0x0081 << 16 )
+#define  kIconImageSequence 0x0088+(0x0200 << 16 )
 #define  kDiffusionBFactor  0x2001+(0x1003 << 16 )// FL
 #define  kSliceOrient  0x2001+(0x100B << 16 )//2001,100B Philips slice orientation (TRANSVERSAL, AXIAL, SAGITTAL)
 #define  kLocationsInAcquisitionPhilips  0x2001+(0x1018 << 16 )
@@ -1422,10 +1439,11 @@ struct TDICOMdata readDICOMv(char * fname, bool isVerbose) {
 #else
     printf("DICOM appears corrupt: first group:element should be 0x0002:0x0000\n");
 #endif
-        char vr[2];
+    char vr[2];
+    bool isIconImageSequence = false;
     bool isSwitchToImplicitVR = false;
     bool isSwitchToBigEndian = false;
-    bool geiisBug = false; //for buggy GEIIS http://forum.dcmtk.org/viewtopic.php?p=7162&sid=3b516cc751aae51fbb5e73184abe37c2
+    //bool geiisBug = false; //for buggy GEIIS http://forum.dcmtk.org/viewtopic.php?p=7162&sid=3b516cc751aae51fbb5e73184abe37c2
     bool is2005140FSQ = false; //for buggy Philips
     bool is2005140FSQwarned = false; //for buggy Philips
     bool isAtFirstPatientPosition = false; //for 3d and 4d files: flag is true for slices at same position as first slice
@@ -1490,8 +1508,9 @@ struct TDICOMdata readDICOMv(char * fname, bool isVerbose) {
                 lLength = buffer[lPos+3] | (buffer[lPos+2] << 8) | (buffer[lPos+1] << 16) | (buffer[lPos] << 24);
             lPos += 4;  //we have loaded the 32-bit length
         } //if explicit else implicit VR
-        if (lLength == 0xFFFFFFFF) lLength = 8; //SQ (Sequences) use 0xFFFFFFFF [4294967295] to denote unknown length 
+        if (lLength == 0xFFFFFFFF) lLength = 8; //SQ (Sequences) use 0xFFFFFFFF [4294967295] to denote unknown length
         //next: look for required tags
+        if ((isIconImageSequence) && ((groupElement & 0x0028) == 0x0028 )) groupElement = kUnused; //ignore icon dimensions
         switch ( groupElement ) {
             case 	kTransferSyntax: {
                 char transferSyntax[kDICOMStr];
@@ -1553,11 +1572,11 @@ struct TDICOMdata readDICOMv(char * fname, bool isVerbose) {
             case 	kLastScanLoc :
                 d.lastScanLoc = dcmStrFloat(lLength, &buffer[lPos]);
                 break;
-            /*case kDiffusionBFactorSiemens :
-                if (d.manufacturer == kMANUFACTURER_SIEMENS)
-                    printf(">>>>%f\n,",dcmStrFloat(lLength, &buffer[lPos]));
-                           
-                break;*/
+                /*case kDiffusionBFactorSiemens :
+                 if (d.manufacturer == kMANUFACTURER_SIEMENS)
+                 printf(">>>>%f\n,",dcmStrFloat(lLength, &buffer[lPos]));
+                 
+                 break;*/
             case kDiffusionDirectionGEX :
                 if (d.manufacturer == kMANUFACTURER_GE)  d.CSA.dtiV[0][1] =  dcmStrFloat(lLength, &buffer[lPos]);
                 break;
@@ -1579,7 +1598,7 @@ struct TDICOMdata readDICOMv(char * fname, bool isVerbose) {
                     if (!is2005140FSQwarned)
                         printf("Warning: Philips R3.2.2 can report different positions for the same slice. Attempting patch.\n");
 #endif
-
+                    
                     is2005140FSQwarned = true;
                 } else {
                     patientPositionCount++;
@@ -1627,11 +1646,11 @@ struct TDICOMdata readDICOMv(char * fname, bool isVerbose) {
                 break;
             case 	kXYSpacing:
                 dcmMultiFloat(lLength, (char*)&buffer[lPos], 2, d.xyzMM);
-            
+                
                 break;
             case 	kImageComments:
-                    dcmStr (lLength, &buffer[lPos], d.imageComments);
-                break; 
+                dcmStr (lLength, &buffer[lPos], d.imageComments);
+                break;
             case 	kLocationsInAcquisitionGE:
                 locationsInAcquisitionGE = dcmInt(lLength,&buffer[lPos],d.isLittleEndian);
                 break;
@@ -1668,7 +1687,7 @@ struct TDICOMdata readDICOMv(char * fname, bool isVerbose) {
                 
             case 	kCoilSiemens : {
                 if (d.manufacturer == kMANUFACTURER_SIEMENS) {
-                //see if image from single coil "H12" or an array "HEA;HEP"
+                    //see if image from single coil "H12" or an array "HEA;HEP"
                     char coilStr[kDICOMStr];
                     dcmStr (lLength, &buffer[lPos], coilStr);
                     //long coilNum = 0;
@@ -1684,6 +1703,9 @@ struct TDICOMdata readDICOMv(char * fname, bool isVerbose) {
                 break;
             case 	kLocationsInAcquisitionPhilips:
                 locationsInAcquisitionPhilips = dcmInt(lLength,&buffer[lPos],d.isLittleEndian);
+                break;
+            case kIconImageSequence:
+                isIconImageSequence = true;
                 break;
             case 	kNumberOfDynamicScans:
                 d.numberOfDynamicScans =  dcmStrInt(lLength, &buffer[lPos]);
@@ -1719,8 +1741,8 @@ struct TDICOMdata readDICOMv(char * fname, bool isVerbose) {
                     d.sliceOrient = kSliceOrientSag; //sagittal
                 else if (toupper(orientStr[0])== 'C')
                     d.sliceOrient = kSliceOrientCor; //coronal
-                 else
-                     d.sliceOrient = kSliceOrientTra; //transverse (axial)
+                else
+                    d.sliceOrient = kSliceOrientTra; //transverse (axial)
                 break; }
             case	kDiffusionBFactor:
                 if ((d.manufacturer == kMANUFACTURER_PHILIPS) && (isAtFirstPatientPosition)) {
@@ -1753,9 +1775,9 @@ struct TDICOMdata readDICOMv(char * fname, bool isVerbose) {
             case 	kCSAImageHeaderInfo:
                 readCSAImageHeader(&buffer[lPos], lLength, &d.CSA, isVerbose);
                 break;
-            //case kObjectGraphics:
-            //    printf("---->%d,",lLength);
-            //    break;
+                //case kObjectGraphics:
+                //    printf("---->%d,",lLength);
+                //    break;
             case kDiffusionBFactorGE :
                 if (d.manufacturer == kMANUFACTURER_GE) d.CSA.dtiV[0][0] =  dcmStrInt(lLength, &buffer[lPos]);
                 break;
@@ -1767,20 +1789,23 @@ struct TDICOMdata readDICOMv(char * fname, bool isVerbose) {
 #else
                     printf("Warning: GEIIS violates the DICOM standard. Inspect results and admonish your vendor.\n");
 #endif
-                    geiisBug = true; //compressed thumbnails do not follow transfer syntax! GE should not re-use pulbic tags for these proprietary images http://sonca.kasshin.net/gdcm/Doc/GE_ImageThumbnails
-
+                    isIconImageSequence = true;
+                    //geiisBug = true; //compressed thumbnails do not follow transfer syntax! GE should not re-use pulbic tags for these proprietary images http://sonca.kasshin.net/gdcm/Doc/GE_ImageThumbnails
+                    
                 }
                 break;
             case 	kOrientation :
                 dcmMultiFloat(lLength, (char*)&buffer[lPos], 6, d.orient);
                 break;
             case 	kImageStart:
-                if (!geiisBug) //do not exit for proprietary thumbnails
+                //if ((!geiisBug) && (!isIconImageSequence)) //do not exit for proprietary thumbnails
+                if (!isIconImageSequence) //do not exit for proprietary thumbnails
                     d.imageStart = (int)lPos;
-                geiisBug = false;
+                //geiisBug = false;
+                isIconImageSequence = false;
                 break;
         } //switch/case for groupElement
-        //printf("VR=%c%c tag=%04x,%04x length=%lu, pos=%ld \n",vr[0],vr[1],groupElement & 65535,groupElement>>16, lLength, lPos);
+        //printf("VR=%c%c tag=%04x,%04x length=%lu, pos=%ld x=%d\n",vr[0],vr[1],groupElement & 65535,groupElement>>16, lLength, lPos, d.xyzDim[1]);
         lPos = lPos + (lLength);
     }
     free (buffer);
@@ -1788,8 +1813,8 @@ struct TDICOMdata readDICOMv(char * fname, bool isVerbose) {
     //printf("slices in Acq %d %d\n",d.locationsInAcquisition,locationsInAcquisitionPhilips);
     if ((d.manufacturer == kMANUFACTURER_PHILIPS) && (d.locationsInAcquisition == 0))
         d.locationsInAcquisition = locationsInAcquisitionPhilips;
-    if ((d.manufacturer == kMANUFACTURER_GE) && (d.locationsInAcquisition == 0))
-        d.locationsInAcquisition = locationsInAcquisitionGE;
+        if ((d.manufacturer == kMANUFACTURER_GE) && (d.locationsInAcquisition == 0))
+            d.locationsInAcquisition = locationsInAcquisitionGE;
             if (zSpacing > 0) d.xyzMM[3] = zSpacing; //use zSpacing if provided: depending on vendor, kZThick may or may not include a slice gap
                 //printf("patientPositions = %d XYZT = %d slicePerVol = %d numberOfDynamicScans %d\n",patientPositionCount,d.xyzDim[3], d.locationsInAcquisition, d.numberOfDynamicScans);
                 if ((d.manufacturer == kMANUFACTURER_PHILIPS) && (patientPositionCount > d.xyzDim[3]))
@@ -1811,12 +1836,12 @@ struct TDICOMdata readDICOMv(char * fname, bool isVerbose) {
     }
     if (coilNum > 0) //segment images with multiple coils
         d.seriesNum = d.seriesNum + (100*coilNum);
-    if (echoNum > 2) //segment images with multiple echoes
+        if (echoNum > 2) //segment images with multiple echoes
             d.seriesNum = d.seriesNum + (100*echoNum);
-    if (isVerbose) {
-        printf("Patient Position %f %f %f\n",d.patientPosition[1],d.patientPosition[2],d.patientPosition[3]);
-        printf("DICOM acq %d img %d ser %ld dim %dx%dx%d mm %gx%gx%g offset %d dyn %d loc %d valid %d ph %d mag %d posReps %d nDTI %d 3d %d\n",d.acquNum,d.imageNum,d.seriesNum,d.xyzDim[1],d.xyzDim[2],d.xyzDim[3],d.xyzMM[1],d.xyzMM[2],d.xyzMM[3],d.imageStart, d.numberOfDynamicScans, d.locationsInAcquisition, d.isValid, d.isHasPhase, d.isHasMagnitude,d.patientPositionSequentialRepeats, d.CSA.numDti, d.is3DAcq);
-    }
+            if (isVerbose) {
+                printf("Patient Position %f %f %f\n",d.patientPosition[1],d.patientPosition[2],d.patientPosition[3]);
+                printf("DICOM acq %d img %d ser %ld dim %dx%dx%d mm %gx%gx%g offset %d dyn %d loc %d valid %d ph %d mag %d posReps %d nDTI %d 3d %d\n",d.acquNum,d.imageNum,d.seriesNum,d.xyzDim[1],d.xyzDim[2],d.xyzDim[3],d.xyzMM[1],d.xyzMM[2],d.xyzMM[3],d.imageStart, d.numberOfDynamicScans, d.locationsInAcquisition, d.isValid, d.isHasPhase, d.isHasMagnitude,d.patientPositionSequentialRepeats, d.CSA.numDti, d.is3DAcq);
+            }
     return d;
 } // readDICOM()
 
