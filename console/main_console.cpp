@@ -1,11 +1,11 @@
 //  main.m dcm2niix
-// by Chris Rorden on 3/22/14, released under Gnu General Public License, Version 2.
+// by Chris Rorden on 3/22/14, see license.txt
 //  Copyright (c) 2014 Chris Rorden. All rights reserved.
 
 //g++ -O3 main_console.cpp nii_dicom.cpp nifti1_io_core.cpp nii_ortho.cpp nii_dicom_batch.cpp -s -o dcm2niix -lz
 
-//if you do not have zlib,you can compile without it 
-// g++ -O3 -DmyDisableZLib main_console.cpp nii_dicom.cpp nifti1_io_core.cpp nii_ortho.cpp nii_dicom_batch.cpp -s -o dcm2niix 
+//if you do not have zlib,you can compile without it
+// g++ -O3 -DmyDisableZLib main_console.cpp nii_dicom.cpp nifti1_io_core.cpp nii_ortho.cpp nii_dicom_batch.cpp -s -o dcm2niix
 //or you can build your own copy:
 // to compile you will first want to build the Z library, then compile the project
 // cd zlib-1.2.8
@@ -20,6 +20,11 @@
 
 //On windows with mingw you may get "fatal error: zlib.h: No such file
 // to remedy, run "mingw-get install libz-dev" from mingw
+
+//Alternatively, windows users with VisualStudio can compile this project
+// vcvarsall amd64
+// cl /EHsc main_console.cpp nii_dicom.cpp jpg_0XC3.cpp ujpeg.cpp nifti1_io_core.cpp nii_ortho.cpp nii_dicom_batch.cpp -DmyDisableOpenJPEG -DmyDisableJasper /odcm2niix
+
 
 //#define mydebugtest //automatically process directory specified in main, ignore input arguments
 
@@ -53,22 +58,26 @@ void showHelp(const char * argv[], struct TDCMopts opts) {
     const char *cstr = removePath(argv[0]);
     printf("usage: %s [options] <in_folder>\n", cstr);
     printf(" Options :\n");
-    printf("  -h : show help\n");
+    printf("  -b : BIDS sidecar (y/n, default n)\n");
     printf("  -f : filename (%%c=comments %%f=folder name %%i ID of patient %%m=manufacturer %%n=name of patient %%p=protocol, %%q=sequence %%s=series, %%t=time; default '%s')\n",opts.filename);
+    printf("  -h : show help\n");
+    printf("  -m : merge 2D slices from same series regardless of study time, echo, coil, orientation, etc. (y/n, default n)\n");
     printf("  -o : output directory (omit to save to input folder)\n");
     printf("  -s : single file mode, do not convert other images in folder (y/n, default n)\n");
+    printf("  -t : text notes includes private patient details (y/n, default n)\n");
     printf("  -v : verbose (y/n, default n)\n");
+    printf("  -x : crop (y/n, default n)\n");
     char gzCh = 'n';
     if (opts.isGz) gzCh = 'y';
     #ifdef myDisableZLib
 		if (strlen(opts.pigzname) > 0)
 			printf("  -z : gz compress images (y/n, default %c)\n", gzCh);
 		else
-			printf("  -z : gz compress images (y/n, default %c) [REQUIRES pigz]\n", gzCh);    
+			printf("  -z : gz compress images (y/n, default %c) [REQUIRES pigz]\n", gzCh);
     #else
 		printf("  -z : gz compress images (y/i/n, default %c) [y=pigz, i=internal, n=no]\n", gzCh);
     #endif
-    
+
 #if defined(_WIN64) || defined(_WIN32)
     printf(" Defaults stored in Windows registry\n");
     printf(" Examples :\n");
@@ -91,38 +100,62 @@ void showHelp(const char * argv[], struct TDCMopts opts) {
 int main(int argc, const char * argv[])
 {
     struct TDCMopts opts;
-    readIniFile(&opts, argv);
+    readIniFile(&opts, argv); //set default preferences
 #ifdef mydebugtest
     //strcpy(opts.indir, "/Users/rorden/desktop/sliceOrder/dicom2/Philips_PARREC_Rotation/NoRotation/DBIEX_4_1.PAR");
      //strcpy(opts.indir, "/Users/rorden/desktop/sliceOrder/dicom2/test");
 	 strcpy(opts.indir, "e:\\t1s");
 #else
-    printf("Chris Rorden's dcm2niiX version %s (%lu-bit)\n",kDCMvers, sizeof(size_t)*8);
+    printf("Chris Rorden's dcm2niiX version %s (%llu-bit)\n",kDCMvers, (unsigned long long) sizeof(size_t)*8);
     if (argc < 2) {
         showHelp(argv, opts);
         return 0;
     }
-    strcpy(opts.indir,argv[argc-1]);
-    strcpy(opts.outdir,opts.indir);
+    bool isCustomOutDir = false;
     int i = 1;
-    int lastCommandArg = -1;
+    int lastCommandArg = 0;
     while (i < (argc)) { //-1 as final parameter is DICOM directory
         if ((strlen(argv[i]) > 1) && (argv[i][0] == '-')) { //command
             if (argv[i][1] == 'h')
                 showHelp(argv, opts);
-            else if ((argv[i][1] == 's') && ((i+1) < argc)) {
+            else if ((argv[i][1] == 'b') && ((i+1) < argc)) {
+                i++;
+                if ((argv[i][0] == 'n') || (argv[i][0] == 'N')  || (argv[i][0] == '0'))
+                    opts.isCreateBIDS = false;
+                else
+                    opts.isCreateBIDS = true;
+            } else if ((argv[i][1] == 'm') && ((i+1) < argc)) {
+                i++;
+                if ((argv[i][0] == 'n') || (argv[i][0] == 'N')  || (argv[i][0] == '0'))
+                    opts.isForceStackSameSeries = false;
+                else
+                    opts.isForceStackSameSeries = true;
+            } else if ((argv[i][1] == 's') && ((i+1) < argc)) {
                 i++;
                 if ((argv[i][0] == 'n') || (argv[i][0] == 'N')  || (argv[i][0] == '0'))
                     opts.isOnlySingleFile = false;
                 else
                     opts.isOnlySingleFile = true;
-                    
-            } else if ((argv[i][1] == 'v') && ((i+1) < argc)) {
+            } else if ((argv[i][1] == 't') && ((i+1) < argc)) {
                 i++;
                 if ((argv[i][0] == 'n') || (argv[i][0] == 'N')  || (argv[i][0] == '0'))
-                    opts.isVerbose = false;
+                    opts.isCreateText = false;
                 else
-                    opts.isVerbose = true;
+                    opts.isCreateText = true;
+            } else if ((argv[i][1] == 'v') && ((i+1) < argc)) {
+                i++;
+                if ((argv[i][0] == 'n') || (argv[i][0] == 'N')  || (argv[i][0] == '0')) //0: verbose OFF
+                    opts.isVerbose = 0;
+                else if ((argv[i][0] == 'h') || (argv[i][0] == 'H')  || (argv[i][0] == '2')) //2: verbose HYPER
+                    opts.isVerbose = 2;
+                else
+                    opts.isVerbose = 1; //1: verbose ON
+            } else if ((argv[i][1] == 'x') && ((i+1) < argc)) {
+                i++;
+                if ((argv[i][0] == 'n') || (argv[i][0] == 'N')  || (argv[i][0] == '0'))
+                    opts.isCrop = false;
+                else
+                    opts.isCrop = true;
             } else if ((argv[i][1] == 'z') && ((i+1) < argc)) {
                 i++;
                 if ((argv[i][0] == 'i') || (argv[i][0] == 'I') ) {
@@ -137,10 +170,10 @@ int main(int argc, const char * argv[])
                 strcpy(opts.filename,argv[i]);
             } else if ((argv[i][1] == 'o') && ((i+1) < argc)) {
                 i++;
+                isCustomOutDir = true;
                 strcpy(opts.outdir,argv[i]);
             }
             lastCommandArg = i;
-            
         } //if parameter is a command
         i ++; //read next parameter
     } //while parameters to read
@@ -155,7 +188,11 @@ int main(int argc, const char * argv[])
     }
 #endif
     clock_t start = clock();
-    nii_loadDir(&opts);
+    for (i = (lastCommandArg+1); i < argc; i++) {
+    	strcpy(opts.indir,argv[i]); // [argc-1]
+    	if (!isCustomOutDir) strcpy(opts.outdir,opts.indir);
+    	nii_loadDir(&opts);
+    }
     printf ("Conversion required %f seconds.\n",((float)(clock()-start))/CLOCKS_PER_SEC);
     saveIniFile(opts);
     return EXIT_SUCCESS;
