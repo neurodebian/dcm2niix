@@ -8,9 +8,13 @@ This software is open source. The bulk of the code is covered by the BSD license
 
 ## Versions
 
-6-June-2016
- - Re-enable custom output directory "-o" option broken by 30-Apr-2016 version
+27-July-2016
+ - Reduce verbosity (reduce number of repeated warnings, less scary warnings for derived rather than raw images).
+ - Re-enable custom output directory "-o" option broken by 30-Apr-2016 version.
  - Deal with mis-behaved GE CT images where slice direction across images is not consistent.
+ - Add new BIDS fields (field strength, manufacturer, etc).
+ - Philips PAR/REC conversion now reports inconsistent requested vs measured TR (due to prospect. motion corr.?)
+ - GE: Locations In Acquisition (0054, 0081) is inaccurate if slices are interpolated, use Images In Acquisition (0020,1002) if available
 
 5-May-2016
  - Crop 3D T1 acquisitions (e.g. ./dcm2niix -x y ~/DICOM).
@@ -62,10 +66,10 @@ e.g. `dcm2niix /path/to/dicom/folder`
 
 Perform a batch conversion of multiple dicoms using the configurations specified in a yaml file.
 ```bash
-dcm2niibatch run_configuration.yaml
+dcm2niibatch batch_config.yml
 ```
 
-The configuration file should be in yaml format as shown in example `run_configuration.yaml`
+The configuration file should be in yaml format as shown in example `batch_config.yaml`
 
 ```yaml
 Options:
@@ -92,9 +96,9 @@ You can add as many files as you want to convert as long as this structure stays
 ### Build command line version with cmake (Linux, Windows, OSx)
 
 ```bash
-mkdir build
-cd build
+mkdir build && cd build
 cmake ..
+make
 ```
 `dcm2niix` will be created in the `bin` folder
 
@@ -107,20 +111,27 @@ This requires the following libraries:
 - yaml-cpp
 - a compiler that supports c++11
 
-e.g. the dependencies can be installed on Ubuntu 14.04 by running
+e.g. the dependencies can be installed as follows:
+
+Ubuntu 14.04
 ```
 sudo apt-get install pkg-config libyaml-cpp-dev libyaml-cpp0.5 cmake
 ```
+OSx
+```
+brew install pkg-config yaml-cpp cmake
+```
+
 
 ### Building the command line version without cmake
 
- This requires a C compiler. With a terminal, change directory to the 'console' folder and run the following:
-
-##### DEFAULT BUILD
+You can also build the software without C-make. The easiest way to do this is to run the function "make" from the "console" folder. Note that this only creates the default version of dcm2niix, not the optional batch version described above. The make command simply calls the g++ compiler, and if you want you can tune this for your build. In essence, the make function simply calls
 
 ```
-g++ -O3 -DmyDisableOpenJPEG -I. main_console.cpp nii_dicom.cpp nifti1_io_core.cpp nii_ortho.cpp nii_dicom_batch.cpp jpg_0XC3.cpp ujpeg.cpp -dead_strip -o dcm2niix
+g++ -dead_strip -O3 -I. main_console.cpp nii_dicom.cpp jpg_0XC3.cpp ujpeg.cpp nifti1_io_core.cpp nii_ortho.cpp nii_dicom_batch.cpp  -o dcm2niix -DmyDisableOpenJPEG -DmyDisableJasper
 ```
+
+The following sub-sections list how you can modify this basic recipe for your needs.
 
 ##### ZLIB BUILD
  If we have zlib, we can use it (-lz) and disable [miniz](https://code.google.com/p/miniz/) (-myDisableMiniZ)
