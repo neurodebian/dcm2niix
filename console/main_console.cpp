@@ -59,7 +59,7 @@ void showHelp(const char * argv[], struct TDCMopts opts) {
     printf("usage: %s [options] <in_folder>\n", cstr);
     printf(" Options :\n");
     printf("  -b : BIDS sidecar (y/n, default n)\n");
-    printf("  -f : filename (%%c=comments %%f=folder name %%i ID of patient %%m=manufacturer %%n=name of patient %%p=protocol, %%q=sequence %%s=series, %%t=time; default '%s')\n",opts.filename);
+    printf("  -f : filename (%%a=antenna  (coil) number %%c=comments %%d=description %%e echo number %%f=folder name %%i ID of patient %%m=manufacturer %%n=name of patient %%p=protocol, %%q=sequence number %%s=series number, %%t=time, %%z sequence name; default '%s')\n",opts.filename);
     printf("  -h : show help\n");
     printf("  -m : merge 2D slices from same series regardless of study time, echo, coil, orientation, etc. (y/n, default n)\n");
     printf("  -o : output directory (omit to save to input folder)\n");
@@ -106,7 +106,14 @@ int main(int argc, const char * argv[])
      //strcpy(opts.indir, "/Users/rorden/desktop/sliceOrder/dicom2/test");
 	 strcpy(opts.indir, "e:\\t1s");
 #else
-    printf("Chris Rorden's dcm2niiX version %s (%llu-bit)\n",kDCMvers, (unsigned long long) sizeof(size_t)*8);
+	#if defined(__APPLE__)
+		#define kOS "MacOS"
+	#elif (defined(__linux) || defined(__linux__))
+		#define kOS "Linux"
+	#else
+		#define kOS "Windows"
+	#endif
+    printf("Chris Rorden's dcm2niiX version %s (%llu-bit %s)\n",kDCMvers, (unsigned long long) sizeof(size_t)*8, kOS);
     if (argc < 2) {
         showHelp(argv, opts);
         return 0;

@@ -410,16 +410,16 @@ int verify_slice_dir (struct TDICOMdata d, struct TDICOMdata d2, struct nifti_1_
         for (int i = 0; i < 4; i++)
             R->m[i][2] = -R->m[i][2];
     }
-#ifdef MY_DEBUG
-    printf("verify slice dir %d %d %d\n",h->dim[1],h->dim[2],h->dim[3]);
-    reportMat44("Rout",*R);
-    printf("iSL = %d\n",iSL);
-    printf(" pos1 = %f\n",pos1);
-#endif
     if (flip)
-        return -iSL;
-    else
-        return iSL;
+        iSL = -iSL;
+	#ifdef MY_DEBUG
+    printf("verify slice dir %d %d %d\n",h->dim[1],h->dim[2],h->dim[3]);
+    //reportMat44((char*)"Rout",*R);
+    printf("flip = %d\n",flip);
+    printf("sliceDir = %d\n",iSL);
+    printf(" pos1 = %f\n",pos1);
+	#endif
+	return iSL;
 } //verify_slice_dir()
 
 mat44 noNaN(mat44 Q44) //simplify any headers that have NaN values
@@ -463,10 +463,172 @@ void setQSForm(struct nifti_1_header *h, mat44 Q44i) {
     h->qform_code = NIFTI_XFORM_SCANNER_ANAT;
 } //setQSForm()
 
+#ifdef my_unused
+
+ivec3 maxCol(mat33 R) {
+//return index of maximum column in 3x3 matrix, e.g. [1 0 0; 0 1 0; 0 0 1] -> 1,2,3
+	ivec3 ixyz;
+	//foo is abs(R)
+    mat33 foo;
+    for (int i=0 ; i < 3 ; i++ )
+        for (int j=0 ; j < 3 ; j++ )
+            foo.m[i][j] =  fabs(R.m[i][j]);
+	//ixyz.v[0] : row with largest value in column 1
+	ixyz.v[0] = 1;
+	if ((foo.m[1][0] > foo.m[0][0]) && (foo.m[1][0] >= foo.m[2][0]))
+		ixyz.v[0] = 2; //2nd column largest column
+	else if ((foo.m[2][0] > foo.m[0][0]) && (foo.m[2][0] > foo.m[1][0]))
+		ixyz.v[0] = 3; //3rd column largest column
+	//ixyz.v[1] : row with largest value in column 2, but not the same row as ixyz.v[1]
+	if (ixyz.v[0] == 1) {
+		ixyz.v[1] = 2;
+		if (foo.m[2][1] > foo.m[1][1])
+			ixyz.v[1] = 3;
+	} else if (ixyz.v[0] == 2) {
+		ixyz.v[1] = 1;
+		if (foo.m[2][1] > foo.m[0][1])
+			ixyz.v[1] = 3;
+	} else { //ixyz.v[0] == 3
+		ixyz.v[1] = 1;
+		if (foo.m[1][1] > foo.m[0][1])
+			ixyz.v[1] = 2;
+	}
+	//ixyz.v[2] : 3rd row, constrained by previous rows
+	ixyz.v[2] = 6 - ixyz.v[1] - ixyz.v[0];//sum of 1+2+3
+	return ixyz;
+}
+
+int sign(float x) {
+//returns -1,0,1 depending on if X is less than, equal to or greater than zero
+	if (x < 0)
+		return -1;
+	else if (x > 0)
+		return 1;
+	return 0;
+}
+
+// Subfunction: get dicom xform matrix and related info
+// This is a direct port of  Xiangrui Li's dicm2nii function
+mat44 xform_mat(struct TDICOMdata d) {
+	vec3 readV = setVec3(d.orient[1],d.orient[2],d.orient[3]);
+	vec3 phaseV = setVec3(d.orient[4],d.orient[5],d.orient[6]);
+    vec3 sliceV = crossProduct(readV ,phaseV);
+    mat33 R;
+    LOAD_MAT33(R, readV.v[0], readV.v[1], readV.v[2],
+    	phaseV.v[0], phaseV.v[1], phaseV.v[2],
+    	sliceV.v[0], sliceV.v[1], sliceV.v[2]);
+    R = nifti_mat33_transpose(R);
+	//reportMat33((char*)"R",R);
+	ivec3 ixyz = maxCol(R);
+	//printf("%d %d %d\n", ixyz.v[0], ixyz.v[1], ixyz.v[2]);
+	int iSL = ixyz.v[2]; // 1/2/3 for Sag/Cor/Tra slice
+	float cosSL = R.m[iSL-1][2];
+	//printf("cosSL\t%g\n", cosSL);
+	//vec3 pixdim = setVec3(d.xyzMM[1], d.xyzMM[2], d.xyzMM[3]);
+	//printf("%g %g %g\n", pixdim.v[0], pixdim.v[1], pixdim.v[2]);
+	mat33 pixdim;
+    LOAD_MAT33(pixdim, d.xyzMM[1], 0.0, 0.0,
+    	0.0, d.xyzMM[2], 0.0,
+    	0.0, 0.0, d.xyzMM[3]);
+	R = nifti_mat33_mul(R, pixdim);
+	//reportMat33((char*)"R",R);
+	mat44 R44;
+	LOAD_MAT44(R44, R.m[0][0], R.m[0][1], R.m[0][2], d.patientPosition[1],
+		R.m[1][0], R.m[1][1], R.m[1][2], d.patientPosition[2],
+		R.m[2][0], R.m[2][1], R.m[2][2], d.patientPosition[3]);
+	//reportMat44((char*)"R",R44);
+	//rest are former: R = verify_slice_dir(R, s, dim, iSL)
+
+
+	if ((d.xyzDim[3]<2) && (d.CSA.mosaicSlices < 2))
+		return R44; //don't care direction for single slice
+	vec3 dim = setVec3(d.xyzDim[1], d.xyzDim[2], d.xyzDim[3]);
+	if (d.CSA.mosaicSlices > 1) { //Siemens mosaic: use dim(1) since no transpose to img
+        float nRowCol = ceil(sqrt((double) d.CSA.mosaicSlices));
+        dim.v[0] = dim.v[0] / nRowCol;
+        dim.v[1] = dim.v[1] / nRowCol;
+        dim.v[2] = d.CSA.mosaicSlices;
+		vec4 dim4 = setVec4((nRowCol-1)*dim.v[0]/2.0f, (nRowCol-1)*dim.v[1]/2.0f, 0);
+		vec4 offset = nifti_vect44mat44_mul(dim4, R44 );
+        //printf("%g %g %g\n", dim.v[0], dim.v[1], dim.v[2]);
+        //printf("%g %g %g\n", dim4.v[0], dim4.v[1], dim4.v[2]);
+        //printf("%g %g %g %g\n", offset.v[0], offset.v[1], offset.v[2], offset.v[3]);
+		//printf("nRowCol\t%g\n", nRowCol);
+		R44.m[0][3] = offset.v[0];
+		R44.m[1][3] = offset.v[1];
+		R44.m[2][3] = offset.v[2];
+		//R44.m[3][3] = offset.v[3];
+		if (sign(d.CSA.sliceNormV[iSL]) != sign(cosSL)) {
+			R44.m[0][2] = -R44.m[0][2];
+			R44.m[1][2] = -R44.m[1][2];
+			R44.m[2][2] = -R44.m[2][2];
+			R44.m[3][2] = -R44.m[3][2];
+		}
+        //reportMat44((char*)"iR44",R44);
+		return R44;
+	} else if (true) {
+//SliceNormalVector TO DO
+		printf("Not completed");
+		exit(2);
+		return R44;
+	}
+	printf("Unable to determine spatial transform\n");
+	exit(1);
+}
+
+
+mat44 set_nii_header(struct TDICOMdata d) {
+	mat44 R = xform_mat(d);
+	//R(1:2,:) = -R(1:2,:); % dicom LPS to nifti RAS, xform matrix before reorient
+    for (int i=0; i<2; i++)
+        for(int j=0; j<4; j++)
+            R.m[i][j] = -R.m[i][j];
+	#ifdef MY_DEBUG
+    reportMat44((char*)"R44",R);
+	#endif
+}
+#endif
+
+// This code predates  Xiangrui Li's set_nii_header function
+mat44 set_nii_header_x(struct TDICOMdata d, struct TDICOMdata d2, struct nifti_1_header *h, int* sliceDir) {
+    *sliceDir = 0;
+    mat44 Q44 = nifti_dicom2mat(d.orient, d.patientPosition, d.xyzMM);
+    if (d.CSA.mosaicSlices > 1) {
+        double nRowCol = ceil(sqrt((double) d.CSA.mosaicSlices));
+        double lFactorX = (d.xyzDim[1] -(d.xyzDim[1]/nRowCol)   )/2.0;
+        double lFactorY = (d.xyzDim[2] -(d.xyzDim[2]/nRowCol)   )/2.0;
+        Q44.m[0][3] =(float)((Q44.m[0][0]*lFactorX)+(Q44.m[0][1]*lFactorY)+Q44.m[0][3]);
+		Q44.m[1][3] = (float)((Q44.m[1][0] * lFactorX) + (Q44.m[1][1] * lFactorY) + Q44.m[1][3]);
+		Q44.m[2][3] = (float)((Q44.m[2][0] * lFactorX) + (Q44.m[2][1] * lFactorY) + Q44.m[2][3]);
+        for (int c=0; c<2; c++)
+            for (int r=0; r<4; r++)
+                Q44.m[c][r] = -Q44.m[c][r];
+        mat33 Q;
+        LOAD_MAT33(Q, d.orient[1], d.orient[4],d.CSA.sliceNormV[1],
+                   d.orient[2],d.orient[5],d.CSA.sliceNormV[2],
+                   d.orient[3],d.orient[6],d.CSA.sliceNormV[3]);
+        if  (nifti_mat33_determ(Q) < 0) { //Siemens sagittal are R>>L, whereas NIfTI is L>>R, we retain Siemens order on disk so ascending is still ascending, but we need to have the spatial transform reflect this.
+            mat44 det;
+            *sliceDir = kSliceOrientMosaicNegativeDeterminant; //we need to handle DTI vectors accordingly
+            LOAD_MAT44(det, 1.0l,0.0l,0.0l,0.0l, 0.0l,1.0l,0.0l,0.0l, 0.0l,0.0l,-1.0l,0.0l);
+            //patient_to_tal.m[2][3] = 1-d.CSA.MosaicSlices;
+            Q44 = nifti_mat44_mul(Q44,det);
+        }
+    } else { //not a mosaic
+        *sliceDir = verify_slice_dir(d, d2, h, &Q44);
+        for (int c=0; c<4; c++)// LPS to nifti RAS, xform matrix before reorient
+            for (int r=0; r<2; r++) //swap rows 1 & 2
+                Q44.m[r][c] = - Q44.m[r][c];
+    }
+	#ifdef MY_DEBUG
+    reportMat44((char*)"Q44",Q44);
+	#endif
+    return Q44;
+}
+
 int headerDcm2NiiSForm(struct TDICOMdata d, struct TDICOMdata d2,  struct nifti_1_header *h) { //fill header s and q form
     //see http://nifti.nimh.nih.gov/pub/dist/src/niftilib/nifti1_io.c
-    //returns sliceDirection: 0=unknown,1=sag,2=coro,3=axial,-=reversed slices
-    //
+    //returns sliceDir: 0=unknown,1=sag,2=coro,3=axial,-=reversed slices
     int sliceDir = 0;
     if (h->dim[3] < 2) return sliceDir; //don't care direction for single slice
     h->sform_code = NIFTI_XFORM_UNKNOWN;
@@ -474,9 +636,6 @@ int headerDcm2NiiSForm(struct TDICOMdata d, struct TDICOMdata d2,  struct nifti_
     bool isOK = false;
     for (int i = 1; i <= 6; i++)
         if (d.orient[i] != 0.0) isOK = true;
-
-    //for (int i = 1; i <= 6; i++)
-    //    printf ("%g\n",d.orient[i]);
     if (!isOK) {
         //we will have to guess, assume axial acquisition saved in standard Siemens style?
         d.orient[1] = 1.0f; d.orient[2] = 0.0f;  d.orient[3] = 0.0f;
@@ -485,89 +644,12 @@ int headerDcm2NiiSForm(struct TDICOMdata d, struct TDICOMdata d2,  struct nifti_
            printf("Unable to determine spatial orientation: 0020,0037 missing (probably not a problem: derived image)\n");
         else
             printf("Unable to determine spatial orientation: 0020,0037 missing!\n");
-        //return sliceDir;
     }
-    mat44 Q44 = nifti_dicom2mat(d.orient, d.patientPosition, d.xyzMM);
-    //reportMat44((char*)"out",*R);
-    if (d.CSA.mosaicSlices > 1) {
-        double nRowCol = ceil(sqrt((double) d.CSA.mosaicSlices));
-        double lFactorX = (d.xyzDim[1] -(d.xyzDim[1]/nRowCol)   )/2.0;
-        double lFactorY = (d.xyzDim[2] -(d.xyzDim[2]/nRowCol)   )/2.0;
-        Q44.m[0][3] =(float)((Q44.m[0][0]*lFactorX)+(Q44.m[0][1]*lFactorY)+Q44.m[0][3]);
-		Q44.m[1][3] = (float)((Q44.m[1][0] * lFactorX) + (Q44.m[1][1] * lFactorY) + Q44.m[1][3]);
-		Q44.m[2][3] = (float)((Q44.m[2][0] * lFactorX) + (Q44.m[2][1] * lFactorY) + Q44.m[2][3]);
-        /* #ifdef obsolete_mosaic_flip
-         double val = d.xyzDim[2]/nRowCol; //obsolete!!!
-         //Q44 now equals 'dicom_to_patient' in spm_dicom_convert
-         mat44 patient_to_tal, analyze_to_dicom;
-         LOAD_MAT44(patient_to_tal, -1.0l,0.0l,0.0l,0.0l, 0.0l,-1.0l,0.0l,0.0l, 0.0l,0.0l,1.0l,0.0l);
-         LOAD_MAT44(analyze_to_dicom, 1.0l,0.0l,0.0l,-1.0l, 0.0l,-1.0l,0.0l,val, 0.0l,0.0l,1.0l,-1.0l);
-         Q44 = nifti_mat44_mul(patient_to_tal,Q44);
-         Q44 = nifti_mat44_mul(Q44,analyze_to_dicom);
-         //Q44 now equals 'mat' in spm_dicom_convert
-         //subasgn.m in SPM5 translates by one voxel...
-         LOAD_MAT44(analyze_to_dicom, 1.0l,0.0l,0.0l,1.0l, 0.0l,1.0l,0.0l,1.0l, 0.0l,0.0l,1.0l,1.0l);
-         Q44 = nifti_mat44_mul(Q44,analyze_to_dicom);
-         #else */
-        for (int c=0; c<2; c++)
-            for (int r=0; r<4; r++)
-                Q44.m[c][r] = -Q44.m[c][r];
-        // #endif
-        mat33 Q;
-        LOAD_MAT33(Q, d.orient[1], d.orient[4],d.CSA.sliceNormV[1],
-                   d.orient[2],d.orient[5],d.CSA.sliceNormV[2],
-                   d.orient[3],d.orient[6],d.CSA.sliceNormV[3]);
-        if  (nifti_mat33_determ(Q) < 0) { //Siemens sagittal are R>>L, whereas NIfTI is L>>R, we retain Siemens order on disk so ascending is still ascending, but we need to have the spatial transform reflect this.
-            mat44 det;
-            sliceDir = kSliceOrientMosaicNegativeDeterminant; //we need to handle DTI vectors accordingly
-            LOAD_MAT44(det, 1.0l,0.0l,0.0l,0.0l, 0.0l,1.0l,0.0l,0.0l, 0.0l,0.0l,-1.0l,0.0l);
-            //patient_to_tal.m[2][3] = 1-d.CSA.MosaicSlices;
-            Q44 = nifti_mat44_mul(Q44,det);
-        }
-    } else { //not a mosaic
-        sliceDir = verify_slice_dir(d, d2, h, &Q44);
-        for (int c=0; c<4; c++)// LPS to nifti RAS, xform matrix before reorient
-            for (int r=0; r<2; r++) //swap rows 1 & 2
-                Q44.m[r][c] = - Q44.m[r][c];
-#ifdef MY_DEBUG
-        reportMat44("final",Q44);
-#endif
-    }
+    //mat44 Q44 = set_nii_header(d);
+    mat44 Q44 = set_nii_header_x(d, d2, h, &sliceDir);
     setQSForm(h,Q44);
     return sliceDir;
 } //headerDcm2NiiSForm()
-
-#ifdef _MSC_VER
-/*
-#define snprintf c99_snprintf
-
-inline int c99_vsnprintf(char* str, size_t size, const char* format, va_list ap)
-{
-	int count = -1;
-
-	if (size != 0)
-		count = _vsnprintf_s(str, size, _TRUNCATE, format, ap);
-	if (count == -1)
-		count = _vscprintf(format, ap);
-
-	return count;
-}
-
-inline int c99_snprintf(char* str, size_t size, const char* format, ...)
-{
-	int count;
-	va_list ap;
-
-	va_start(ap, format);
-	count = c99_vsnprintf(str, size, format, ap);
-	va_end(ap);
-
-	return count;
-}
-*/
-
-
-#endif // _MSC_VER
 
 int headerDcm2Nii2(struct TDICOMdata d, struct TDICOMdata d2, struct nifti_1_header *h) { //final pass after de-mosaic
     char txt[1024] = {""};
@@ -638,7 +720,9 @@ struct TDICOMdata clear_dicom_data() {
     d.dateTime = (double)19770703150928.0;
     d.acquisitionTime = 0.0f;
     strcpy(d.protocolName, "MPRAGE");
-    strcpy(d.scanningSequence, "GR");
+    strcpy(d.seriesDescription, "T1_mprage");
+    strcpy(d.sequenceName, "T1");
+    strcpy(d.scanningSequence, "tfl3d1_ns");
     d.manufacturer = kMANUFACTURER_UNKNOWN;
     d.isPlanarRGB = false;
     d.lastScanLoc = NAN;
@@ -767,15 +851,15 @@ float dcmFloat(int lByteLength, unsigned char lBuffer[], bool littleEndian) {//r
     float retVal;
     memcpy(&retVal, (char*)&lBuffer[0], 4);
     if (!swap) return retVal;
-    char *floatToConvert = ( char* ) & lBuffer;
-    char *returnFloat = ( char* ) & retVal;
-    //swap the bytes into a temporary buffer
-    returnFloat[0] = floatToConvert[3];
-    returnFloat[1] = floatToConvert[2];
-    returnFloat[2] = floatToConvert[1];
-    returnFloat[3] = floatToConvert[0];
-    //printf("swapped val = %f\n",retVal);
-    return retVal;
+    float swapVal;
+    char *inFloat = ( char* ) & retVal;
+    char *outFloat = ( char* ) & swapVal;
+    outFloat[0] = inFloat[3];
+    outFloat[1] = inFloat[2];
+    outFloat[2] = inFloat[1];
+    outFloat[3] = inFloat[0];
+    //printf("swapped val = %f\n",swapVal);
+    return swapVal;
 } //dcmFloat()
 
 double dcmFloatDouble(int lByteLength, unsigned char lBuffer[], bool littleEndian) {//read binary 32-bit float
@@ -1225,12 +1309,6 @@ bool isFloatDiff (float a, float b) {
     return (fabs (a - b) > FLT_EPSILON);
 } //isFloatDiff()
 
-ivec3 setVec3i(int x, int y, int z)
-{
-    ivec3 v = {x, y, z};
-    return v;
-} //setVec3i()
-
 mat33 nifti_mat33_reorder_cols( mat33 m, ivec3 v ) {
     // matlab equivalent ret = m(:, v); where v is 1,2,3 [INDEXED FROM ONE!!!!]
     mat33 ret;
@@ -1260,7 +1338,9 @@ float PhilipsPreciseVal (float lPV, float lRS, float lRI, float lSS) {
 
 struct TDICOMdata  nii_readParRec (char * parname, int isVerbose, struct TDTI4D *dti4D) {
     struct TDICOMdata d = clear_dicom_data();
-    strcpy(d.protocolName, ""); //fill dummy with empty space so we can detect kProtocolNameGE
+    strcpy(d.protocolName, ""); //erase dummy with empty
+    strcpy(d.seriesDescription, ""); //erase dummy with empty
+    strcpy(d.sequenceName, ""); //erase dummy with empty
     strcpy(d.scanningSequence, "");
     FILE *fp = fopen(parname, "r");
     if (fp == NULL) return d;
@@ -1527,14 +1607,14 @@ struct TDICOMdata  nii_readParRec (char * parname, int isVerbose, struct TDTI4D 
     LOAD_MAT33(rz, ca.v[2], -sa.v[2], 0.0f, sa.v[2], ca.v[2], 0.0f, 0.0f, 0.0f, 1.0f);
     mat33 R = nifti_mat33_mul( rx,ry );
     R = nifti_mat33_mul( R,rz);
-    ivec3 ixyz = setVec3i(1,2,3);
+    ivec3 ixyz = setiVec3(1,2,3);
     if (d.sliceOrient == kSliceOrientSag) {
-        ixyz = setVec3i(2,3,1);
+        ixyz = setiVec3(2,3,1);
         for (int r = 0; r < 3; r++)
             for (int c = 0; c < 3; c++)
                 if (c != 1) R.m[r][c] = -R.m[r][c]; //invert first and final columns
     }else if (d.sliceOrient == kSliceOrientCor) {
-        ixyz = setVec3i(1,3,2);
+        ixyz = setiVec3(1,3,2);
         for (int r = 0; r < 3; r++)
             R.m[r][2] = -R.m[r][2]; //invert rows of final column
     }
@@ -1648,13 +1728,14 @@ unsigned char * nii_demosaic(unsigned char* inImg, struct nifti_1_header *hdr, i
             col = 0;
         } //start new column
     } //for m = each mosaic slice
+    /* //we now provide a warning once per series rather than once per volume (see nii_dicom_batch)
     if (ProtocolSliceNumber1 > 1) {
 #ifdef myUseCOut
      	std::cout<<"WARNING: CSA 'ProtocolSliceNumber' SUGGESTS REVERSED SLICE ORDER: SPATIAL AND DTI COORDINATES UNTESTED" <<std::endl;
 #else
-        printf("WARNING: CSA 'ProtocolSliceNumber' SUGGESTS REVERSED SLICE ORDER: SPATIAL AND DTI COORDINATES UNTESTED\n");
+        printf("WARNING: WEIRD CSA 'ProtocolSliceNumber': SPATIAL AND DTI TRANSFORMS UNTESTED\n");
 #endif
-    }
+    }*/
     /*if ((ProtocolSliceNumber1 > 1) && (hdr->dim[3] > 1)) { //exceptionally rare: reverse order of slices - now handled in matrix...
      int sliceBytes = hdr->dim[1] * hdr->dim[2] * hdr->bitpix/8;
      memcpy(&inImg[0], &outImg[0],sliceBytes*hdr->dim[3]); //copy data with reversed order dest, src, bytes
@@ -1668,7 +1749,6 @@ unsigned char * nii_demosaic(unsigned char* inImg, struct nifti_1_header *hdr, i
      }*/
     free(inImg);
     return outImg;
-    //return [NSData dataWithBytes:&outImg length:outlen];
 } // nii_demosaic()
 
 unsigned char * nii_flipImgY(unsigned char* bImg, struct nifti_1_header *hdr){
@@ -1749,7 +1829,7 @@ unsigned char * nii_flipZ(unsigned char* bImg, struct nifti_1_header *h){
     LOAD_MAT44(Q44,h->srow_x[0],h->srow_x[1],h->srow_x[2],h->srow_x[3],
                h->srow_y[0],h->srow_y[1],h->srow_y[2],h->srow_y[3],
                h->srow_z[0],h->srow_z[1],h->srow_z[2],h->srow_z[3]);
-    vec4 v=  setVec4(0.0f,0.0f,(float) h->dim[3]-1.0f);
+    vec4 v= setVec4(0.0f,0.0f,(float) h->dim[3]-1.0f);
     v = nifti_vect44mat44_mul(v, Q44); //after flip this voxel will be the origin
     mat33 mFlipZ;
     LOAD_MAT33(mFlipZ,1.0f, 0.0f, 0.0f, 0.0f,1.0f,0.0f, 0.0f,0.0f,-1.0f);
@@ -2162,6 +2242,8 @@ unsigned char * nii_loadImgJPEGC3(char* imgname, struct nifti_1_header hdr, stru
     //return decode_JPEG_SOF_0XC3 (imgname, dcm.imageStart, false, &dimX, &dimY, &bits, &frames);
     unsigned char * ret = decode_JPEG_SOF_0XC3 (imgname, dcm.imageStart, false, &dimX, &dimY, &bits, &frames);
     //printf("JPEG %fms\n", ((double)(clock()-start))/1000);
+    if (hdr.dim[3] != frames)
+        printf("Unable to decode all slices (%d/%d). Please use dcmdjpeg to uncompress data.\n", frames, hdr.dim[3]);
     return ret;
 }
 
@@ -2283,8 +2365,10 @@ int isDICOMfile(const char * fname) { //0=NotDICOM, 1=DICOM, 2=Maybe(not Part 10
 struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, struct TDTI4D *dti4D) {
 //struct TDICOMdata readDICOMv(char * fname, bool isVerbose, int compressFlag) {
 	struct TDICOMdata d = clear_dicom_data();
-    strcpy(d.protocolName, ""); //fill dummy with empty space so we can detect kProtocolNameGE
-    strcpy(d.scanningSequence, "");
+    strcpy(d.protocolName, ""); //erase dummy with empty
+    strcpy(d.protocolName, ""); //erase dummy with empty
+    strcpy(d.seriesDescription, ""); //erase dummy with empty
+    strcpy(d.sequenceName, ""); //erase dummy with empty
     //do not read folders - code specific to GCC (LLVM/Clang seems to recognize a small file size)
 
     struct stat s;
@@ -2352,7 +2436,7 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
 #define  kStudyTime 0x0008+(0x0030 << 16 )
 #define  kAcquisitionTime 0x0008+(0x0032 << 16 )
 #define  kManufacturer 0x0008+(0x0070 << 16 )
-#define  kProtocolNameGE 0x0008+(0x103E << 16 )
+#define  kSeriesDescription 0x0008+(0x103E << 16 ) // '0008' '103E' 'LO' 'SeriesDescription'
 #define  kManufacturersModelName 0x0008+(0x1090 << 16 )
 #define  kDerivationDescription 0x0008+(0x2111 << 16 )
 #define  kComplexImageComponent (uint32_t) 0x0008+(0x9208 << 16 )//'0008' '9208' 'CS' 'ComplexImageComponent'
@@ -2403,7 +2487,6 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
     //#define  kObjectGraphics  0x0029+(0x1210 << 16 )    //0029,1210 syngoPlatformOOGInfo Object Oriented Graphics
 #define  kRealWorldIntercept  0x0040+uint32_t(0x9224 << 16 ) //IS dicm2nii's SlopInt_6_9
 #define  kRealWorldSlope  0x0040+uint32_t(0x9225 << 16 ) //IS dicm2nii's SlopInt_6_9
-
 #define  kDiffusionBFactorGE  0x0043+(0x1039 << 16 ) //IS dicm2nii's SlopInt_6_9
 #define  kCoilSiemens  0x0051+(0x100F << 16 )
 #define  kLocationsInAcquisition  0x0054+(0x0081 << 16 )
@@ -2641,9 +2724,9 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
             case kPatientID :
                 dcmStr (lLength, &buffer[lPos], d.patientID);
                 break;
-            case kProtocolNameGE: {
-                if (strlen(d.protocolName) < 1) //if (d.manufacturer == kMANUFACTURER_GE)
-                    dcmStr (lLength, &buffer[lPos], d.protocolName);
+            case kSeriesDescription: {
+                //if (strlen(d.protocolName) < 1)
+                dcmStr (lLength, &buffer[lPos], d.seriesDescription);
                 break; }
             case kManufacturersModelName :
             	dcmStr (lLength, &buffer[lPos], d.manufacturersModelName);
@@ -2656,8 +2739,8 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
                 break;
             }
             case kProtocolName : {
-                if ((strlen(d.protocolName) < 1) || (d.manufacturer != kMANUFACTURER_GE)) //GE uses a generic session name here: do not overwrite kProtocolNameGE
-                    dcmStr (lLength, &buffer[lPos], d.protocolName); //see also kSequenceName
+                //if ((strlen(d.protocolName) < 1) || (d.manufacturer != kMANUFACTURER_GE)) //GE uses a generic session name here: do not overwrite kProtocolNameGE
+                dcmStr (lLength, &buffer[lPos], d.protocolName); //see also kSequenceName
                 break; }
             case 	kPatientOrient :
                 dcmStr (lLength, &buffer[lPos], d.patientOrient);
@@ -2823,13 +2906,12 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
                 if (lLength > 1) d.is3DAcq = (buffer[lPos]=='3') && (toupper(buffer[lPos+1]) == 'D');
                 break;
             case kScanningSequence : {
-                if (strlen(d.scanningSequence) < 1) //precedence given to kProtocolName and kProtocolNameGE
-                    dcmStr (lLength, &buffer[lPos], d.scanningSequence);
+                dcmStr (lLength, &buffer[lPos], d.scanningSequence);
                 break;
             }
             case kSequenceName : {
-                if (strlen(d.protocolName) < 1) //precedence given to kProtocolName and kProtocolNameGE
-                    dcmStr (lLength, &buffer[lPos], d.protocolName);
+                //if (strlen(d.protocolName) < 1) //precedence given to kProtocolName and kProtocolNameGE
+                dcmStr (lLength, &buffer[lPos], d.sequenceName);
                 break;
             }
             case	kMRAcquisitionTypePhilips: //kMRAcquisitionType
@@ -2874,6 +2956,7 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
                         dti4D->S[0].V[2] = d.CSA.dtiV[2];
                         dti4D->S[0].V[3] = d.CSA.dtiV[3];
                     }
+
                     d.CSA.dtiV[0] = dcmFloat(lLength, &buffer[lPos],d.isLittleEndian);
                     if ((d.CSA.numDti > 1) && (d.CSA.numDti < kMaxDTI4D))
                         dti4D->S[d.CSA.numDti-1].V[0] = d.CSA.dtiV[0];
@@ -3047,6 +3130,14 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
     	d.CSA.mosaicSlices = (d.xyzDim[1] / phaseEncodingSteps) * (d.xyzDim[2] / phaseEncodingSteps);
     	printf("Warning: mosaic inferred without CSA header (check number of slices and spatial orientation)\n");
     }
+    if ((d.manufacturer == kMANUFACTURER_SIEMENS) && (d.CSA.dtiV[1] < -1.0) && (d.CSA.dtiV[2] < -1.0) && (d.CSA.dtiV[3] < -1.0))
+    	d.CSA.dtiV[0] = 0; //SiemensTrio-Syngo2004A reports B=0 images as having impossible b-vectors.
+    if ((d.manufacturer == kMANUFACTURER_GE) && (strlen(d.seriesDescription) > 1)) //GE uses a generic session name here: do not overwrite kProtocolNameGE
+		strcpy(d.protocolName, d.seriesDescription);
+    if ((strlen(d.protocolName) < 1) && (strlen(d.seriesDescription) > 1))
+		strcpy(d.protocolName, d.seriesDescription);
+    if ((strlen(d.protocolName) < 1) && (strlen(d.sequenceName) > 1))
+		strcpy(d.protocolName, d.sequenceName);
 	//     if (!isOrient) {
 	//     	if (d.isNonImage)
 	//     		printf("Warning: spatial orientation ambiguous  (tag 0020,0037 not found) [probably not important: derived image]: %s\n", fname);
@@ -3058,6 +3149,8 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
     if (isVerbose) {
         printf("%s\n patient position\t%g\t%g\t%g\n",fname, d.patientPosition[1],d.patientPosition[2],d.patientPosition[3]);
         printf(" acq %d img %d ser %ld dim %dx%dx%d mm %gx%gx%g offset %d dyn %d loc %d valid %d ph %d mag %d posReps %d nDTI %d 3d %d bits %d littleEndian %d echo %d coil %d\n",d.acquNum,d.imageNum,d.seriesNum,d.xyzDim[1],d.xyzDim[2],d.xyzDim[3],d.xyzMM[1],d.xyzMM[2],d.xyzMM[3],d.imageStart, d.numberOfDynamicScans, d.locationsInAcquisition, d.isValid, d.isHasPhase, d.isHasMagnitude,d.patientPositionSequentialRepeats, d.CSA.numDti, d.is3DAcq, d.bitsAllocated, d.isLittleEndian, d.echoNum, d.coilNum);
+        if (d.CSA.dtiV[0] > 0)
+        	printf(" DWI bxyz %g %g %g %g\n", d.CSA.dtiV[0], d.CSA.dtiV[1], d.CSA.dtiV[2], d.CSA.dtiV[3]);
     }
     if (d.CSA.numDti >= kMaxDTI4D) {
         printf("Error: unable to convert DTI [increase kMaxDTI4D]\n");

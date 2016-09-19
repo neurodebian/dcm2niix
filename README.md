@@ -1,6 +1,6 @@
 ## About
 
-dcm2niix is a designed to convert neuroimaging data from the DICOM format to the NIfTI format. For details and compiled versions visit the [NITRC wiki](http://www.nitrc.org/plugins/mwiki/index.php/dcm2nii:MainPage)
+dcm2niix is a designed to convert neuroimaging data from the DICOM format to the NIfTI format. For details and compiled versions visit the [NITRC wiki](http://www.nitrc.org/plugins/mwiki/index.php/dcm2nii:MainPage).
 
 ## License
 
@@ -8,13 +8,16 @@ This software is open source. The bulk of the code is covered by the BSD license
 
 ## Versions
 
-27-July-2016
+28-Aug-2016
  - Reduce verbosity (reduce number of repeated warnings, less scary warnings for derived rather than raw images).
  - Re-enable custom output directory "-o" option broken by 30-Apr-2016 version.
  - Deal with mis-behaved GE CT images where slice direction across images is not consistent.
  - Add new BIDS fields (field strength, manufacturer, etc).
  - Philips PAR/REC conversion now reports inconsistent requested vs measured TR (due to prospect. motion corr.?)
  - GE: Locations In Acquisition (0054, 0081) is inaccurate if slices are interpolated, use Images In Acquisition (0020,1002) if available
+ - New filename options %d Series description (0008,103E), %z Sequence Name (0018,0024)
+ - New filename options %a antenna (coil) number, %e echo number
+
 
 5-May-2016
  - Crop 3D T1 acquisitions (e.g. ./dcm2niix -x y ~/DICOM).
@@ -59,8 +62,7 @@ This software is open source. The bulk of the code is covered by the BSD license
 
 ## Running
 
-See help: `dcm2niix -h`
-e.g. `dcm2niix /path/to/dicom/folder`
+Command line usage is described in the [NITRC wiki](https://www.nitrc.org/plugins/mwiki/index.php/dcm2nii:MainPage#General_Usage). The minimal command line call would be `dcm2niix /path/to/dicom/folder`. However, you may want to invoke additional options, for example the call `dcm2niix -z y -f %p_%t_%s -o /path/ouput /path/to/dicom/folder` will save data as gzip compressed, with the filename based on the protocol name (%p) acquisition time (%t) and DICOM series number (%s), with all files saved to the folder "output". For more help see help: `dcm2niix -h`.
 
 **Optional batch processing version:**
 
@@ -115,9 +117,9 @@ e.g. the dependencies can be installed as follows:
 
 Ubuntu 14.04
 ```
-sudo apt-get install pkg-config libyaml-cpp-dev libyaml-cpp0.5 cmake
+sudo apt-get install pkg-config libyaml-cpp-dev libyaml-cpp0.5 cmake libboost-dev
 ```
-OSx
+OSX
 ```
 brew install pkg-config yaml-cpp cmake
 ```
@@ -211,9 +213,7 @@ file ./dcm2niix
 
 ##### OSX GRAPHICAL INTERFACE BUILD
 
-Building OSX graphical user interface using XCode:
- Copy contents of "console" folder to /xcode/dcm2/core
- Open and compile "dcm2.xcodeproj" with XCode 4.6 or later
+You can building the OSX graphical user interface using XCode. First, Copy contents of "console" folder to /xcode/dcm2/core. Next, open and compile the project "dcm2.xcodeproj" with XCode 4.6 or later
 
 ##### THE QT AND wxWIDGETS GUIs ARE NOT YET SUPPORT - FOLLOWING LINES FOR FUTURE VERSIONS
 
@@ -232,10 +232,10 @@ wxWdigets makefiles are pretty complex and specific for your operating system. F
  rename 's/\.c$/\.cpp/' *
  g.) edit the /samples/clipboard makefile: Add "nii_dicom.o nifti1_io_core.o nii_ortho.o nii_dicom_batch.o \" to CLIPBOARD_OBJECTS:
 CLIPBOARD_OBJECTS =  \
-	nii_dicom.o nifti1_io_core.o nii_ortho.o nii_dicom_batch.o \
-	$(__clipboard___win32rc) \
-	$(__clipboard_os2_lib_res) \
-	clipboard_clipboard.o
+  nii_dicom.o nifti1_io_core.o nii_ortho.o nii_dicom_batch.o \
+  $(__clipboard___win32rc) \
+  $(__clipboard_os2_lib_res) \
+  clipboard_clipboard.o
  h.) edit the /samples/clipboard makefile: With wxWidgets we will capture std::cout comments, not printf, so we need to add "-DDmyUseCOut" to CXXFLAGS:
 CXXFLAGS = -DmyUseCOut -DWX_PRECOMP ....
  i.) For a full refresh
