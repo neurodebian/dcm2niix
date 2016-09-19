@@ -1,3 +1,12 @@
+dcm2niix (0.20160606.1+git50-g236b267-1) neurodebian; urgency=medium
+
+  * Fresh upstream snapshot which seems to resolve (partially) some
+    issues with "random" values for some header fields.
+    See https://github.com/neurolabusc/dcm2niix/issues/45
+    for more info
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Sun, 18 Sep 2016 22:51:34 -0400
+
 dcm2niix (0.20160606.1+git22-gf6471c0-1) neurodebian; urgency=medium
 
   * New upstream snapshot (not officially "released")
