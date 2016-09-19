@@ -1,11 +1,10 @@
-dcm2niix (0.20160606.1+git50-g236b267-1) neurodebian; urgency=medium
+dcm2niix (0.20160606.1+git51-g615d612-1) neurodebian; urgency=medium
 
-  * Fresh upstream snapshot which seems to resolve (partially) some
-    issues with "random" values for some header fields.
-    See https://github.com/neurolabusc/dcm2niix/issues/45
-    for more info
+  * Fresh upstream snapshot which addresses the concern of use of
+    non-initialized fields in the NIfTI headers See
+    https://github.com/neurolabusc/dcm2niix/issues/45 for more info
 
- -- Yaroslav Halchenko <debian@onerussian.com>  Sun, 18 Sep 2016 22:51:34 -0400
+ -- Yaroslav Halchenko <debian@onerussian.com>  Mon, 19 Sep 2016 10:29:01 -0400
 
 dcm2niix (0.20160606.1+git22-gf6471c0-1) neurodebian; urgency=medium
 
