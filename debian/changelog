@@ -1,7 +1,8 @@
-dcm2niix (0.20160921-1) neurodebian; urgency=medium
+dcm2niix (20160921-1) neurodebian; urgency=medium
 
   * Fresh upstream release
     + Support 3D lossless JPEG saved as multiple fragments
+  * Switching to upstream versioning scheme (by release date)
 
  -- Yaroslav Halchenko <debian@onerussian.com>  Fri, 23 Sep 2016 08:17:42 -0400
 
