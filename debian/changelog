@@ -1,10 +1,10 @@
-dcm2niix (20160921+git15-gf7b898b-1) neurodebian; urgency=medium
+dcm2niix (20160921+git16-g0339407-1) neurodebian; urgency=medium
 
-  * New upstream snapshot from 20160921-15-gf7b898b 
+  * New upstream snapshot from 20160921-16-g0339407
     - now will fail if output directory is N/A
     - various minor fixups
 
- -- Yaroslav Halchenko <debian@onerussian.com>  Tue, 04 Oct 2016 08:49:24 -0400
+ -- Yaroslav Halchenko <debian@onerussian.com>  Tue, 04 Oct 2016 10:15:54 -0400
 
 dcm2niix (20160921-1) neurodebian; urgency=medium
 
