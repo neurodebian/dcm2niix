@@ -356,6 +356,24 @@ void nii_SaveBIDS(char pathoutname[], struct TDICOMdata d, struct TDCMopts opts,
 						break;
 	};
 	fprintf(fp, "\t\"ManufacturersModelName\": \"%s\",\n", d.manufacturersModelName );
+	bool first = true;
+	char *saveptr, *subtoken, *str1;
+	const char sep = '_';
+	if (strlen(d.imageType) > 0) {
+	  fprintf(fp, "\t\"ImageType\": [");
+	  for (str1 = d.imageType; ; str1 = NULL ) {
+		 subtoken = strtok_r(str1, &sep, &saveptr);
+		 if (subtoken == NULL)
+			 break;
+		 if (!first)
+		   fprintf(fp, ", ");
+		 else
+		   first = false;
+		 fprintf(fp, "\"%s\"", subtoken );
+	  }
+	  fprintf(fp, "],\n");
+	}
+	if (d.dateTime > 0.0) fprintf(fp, "\t\"AcquisitionDateTime\": %f,\n", d.dateTime );
 	//if conditionals: the following values are required for DICOM MRI, but not available for CT
 	if (d.fieldStrength > 0.0) fprintf(fp, "\t\"MagneticFieldStrength\": %g,\n", d.fieldStrength );
 	if (d.flipAngle > 0.0) fprintf(fp, "\t\"FlipAngle\": %g,\n", d.flipAngle );
@@ -370,7 +388,7 @@ void nii_SaveBIDS(char pathoutname[], struct TDICOMdata d, struct TDCMopts opts,
 		fprintf(fp, "\t\"EffectiveEchoSpacing\": %g,\n", dwellTime );
 
     }
-	bool first = 1;
+	first = 1;
 	if (dti4D->S[0].sliceTiming >= 0.0) {
    		fprintf(fp, "\t\"SliceTiming\": [\n");
 		for (int i = 0; i < kMaxDTI4D; i++) {
@@ -738,6 +756,14 @@ int nii_createFilename(struct TDICOMdata dcm, char * niiFilename, struct TDCMopt
                 sprintf(newstr, "%0.0f", dcm.dateTime);
                 strcat (outname,newstr);
             }
+			if (f == 'U') {
+				#ifdef mySegmentByAcq
+				sprintf(newstr, "%d", dcm.acquNum);
+				strcat (outname,newstr);
+				#else
+    			printf("Warning: ignoring '%f' in output filename (recompile to segment by acquisition)\n");
+    			#endif
+			}
             if (f == 'Z')
                 strcat (outname,dcm.sequenceName);
             start = pos + 1;
@@ -1570,11 +1596,12 @@ int isSameFloatDouble (double a, double b) {
 }
 
 struct TWarnings { //generate a warning only once per set
-        bool bitDepthVaries, dateTimeVaries, echoVaries, coilVaries, nameVaries, orientVaries;
+        bool acqNumVaries, bitDepthVaries, dateTimeVaries, echoVaries, coilVaries, nameVaries, orientVaries;
 };
 
 TWarnings setWarnings() {
 	TWarnings r;
+	r.acqNumVaries = false;
 	r.bitDepthVaries = false;
 	r.dateTimeVaries = false;
 	r.echoVaries = false;
@@ -1588,8 +1615,17 @@ bool isSameSet (struct TDICOMdata d1, struct TDICOMdata d2, bool isForceStackSam
     //returns true if d1 and d2 should be stacked together as a single output
     if (!d1.isValid) return false;
     if (!d2.isValid) return false;
-    if  (d1.seriesNum != d2.seriesNum) return false;
-    if ((d1.bitsAllocated != d2.bitsAllocated) || (d1.xyzDim[1] != d2.xyzDim[1]) || (d1.xyzDim[2] != d2.xyzDim[2]) || (d1.xyzDim[3] != d2.xyzDim[3]) ) {
+	if (d1.seriesNum != d2.seriesNum) return false;
+	#ifdef mySegmentByAcq
+    if (d1.acquNum != d2.acquNum) return false;
+    #else
+    if (d1.acquNum != d2.acquNum) {
+        if (!warnings->acqNumVaries)
+        	printf("slices stacked despite varying acquisition numbers (if this is not desired please recompile)\n");
+        warnings->acqNumVaries = true;
+    }
+    #endif
+	if ((d1.bitsAllocated != d2.bitsAllocated) || (d1.xyzDim[1] != d2.xyzDim[1]) || (d1.xyzDim[2] != d2.xyzDim[2]) || (d1.xyzDim[3] != d2.xyzDim[3]) ) {
         if (!warnings->bitDepthVaries)
         	printf("slices not stacked: dimensions or bit-depth varies\n");
         warnings->bitDepthVaries = true;
@@ -1967,12 +2003,13 @@ int nii_loadDir (struct TDCMopts* opts) {
     if (strlen(opts->outdir) < 1)
         strcpy(opts->outdir,opts->indir);
     else if (!is_dir(opts->outdir,true)) {
-        #ifdef myUseCOut
-    	std::cout << "Warning: output folder invalid "<< opts->outdir<<" will try %s\n"<< opts->indir <<std::endl;
-    	#else
-     	printf("Warning: output folder invalid %s will try %s\n",opts->outdir,opts->indir);
-        #endif
-        strcpy(opts->outdir,opts->indir);
+		#ifdef myUseInDirIfOutDirUnavailable
+		printf("Warning: output folder invalid %s will try %s\n",opts->outdir,opts->indir);
+		strcpy(opts->outdir,opts->indir);
+		#else
+		printf("Error: output folder invalid: %s\n",opts->outdir);
+		return EXIT_FAILURE;
+		#endif
     }
     /*if (isFile && ((isExt(indir, ".gz")) || (isExt(indir, ".tgz"))) ) {
         #ifndef myDisableTarGz
