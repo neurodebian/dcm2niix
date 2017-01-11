@@ -1,27 +1,47 @@
+[![Build Status](https://travis-ci.org/rordenlab/dcm2niix.svg?branch=master)](https://travis-ci.org/rordenlab/dcm2niix)
+[![Build status](https://ci.appveyor.com/api/projects/status/xdkqua54f90x4049/branch/master?svg=true)](https://ci.appveyor.com/project/chrisfilo/dcm2niix)
+
 ## About
 
 dcm2niix is a designed to convert neuroimaging data from the DICOM format to the NIfTI format. For details and compiled versions visit the [NITRC wiki](http://www.nitrc.org/plugins/mwiki/index.php/dcm2nii:MainPage).
 
 ## License
 
-This software is open source. The bulk of the code is covered by the BSD license. Some units are either public domain or have similar licenses. See the license.txt file for more details.
+This software is open source. The bulk of the code is covered by the BSD license. Some units are either public domain (nifti*.*, miniz.c) or use the MIT license (ujpeg.cpp). See the license.txt file for more details.
 
 ## Versions
 
-29-Sept-2016
+1-Jan-2017
+ - Handle 3D Philips DICOM files where images are not stored in a spatially contiguous order.
+ - Handle DICOM violations where icon is uncompressed but image data is compressed.
+ - Best guess matrix for 2D slices (similar to dcm2nii, SPM and MRIconvert).
+ - Linux (case sensitive filenames) now handles par/rec as well as PAR/REC.
+ - Images with unknown phase encoding do not generate [BIDS entry](https://github.com/rordenlab/dcm2niix/issues/79).
+ - Unified printMessage/printWarning/printError aids embedding in other projects, such as [divest](https://github.com/jonclayden/divest).
+
+1-Nov-2016
+ - AppVeyor Support (Ningfei Li & Chris Filo Gorgolewski)
+ - Swap 3rd/4th dimensions for GE sequential multi-phase acquisitions (Niels Janssen).
+
+10-Oct-2016
+ - Restores/improves building for the Windows operating system using MinGW.
+
+30-Sept-2016
  - Save ImageType (0x0008,0x0008) to BIDS.
+ - Separate CT scans with different exposures.
+ - Fixed issues where some compilers would generate erratic filenames for zero-padded series (e.g. "-f %3s").
 
 21-Sept-2016
  - Reduce verbosity (reduce number of repeated warnings, less scary warnings for derived rather than raw images).
  - Re-enable custom output directory "-o" option broken by 30-Apr-2016 version.
  - Deal with mis-behaved GE CT images where slice direction across images is not consistent.
  - Add new BIDS fields (field strength, manufacturer, etc).
- - Philips PAR/REC conversion now reports inconsistent requested vs measured TR (due to prospect. motion corr.?)
- - GE: Locations In Acquisition (0054, 0081) is inaccurate if slices are interpolated, use Images In Acquisition (0020,1002) if available
- - New filename options %d Series description (0008,103E), %z Sequence Name (0018,0024)
- - New filename options %a antenna (coil) number, %e echo number
- - Initialize unused portions of NIfTI header to zero so multiple runs always produce identical results
- - Supports 3D lossless JPEG saved as [multiple fragments](http://www.nitrc.org/forum/forum.php?thread_id=5872&forum_id=4703)
+ - Philips PAR/REC conversion now reports inconsistent requested vs measured TR (due to prospect. motion corr.?).
+ - GE: Locations In Acquisition (0054, 0081) is inaccurate if slices are interpolated, use Images In Acquisition (0020,1002) if available.
+ - New filename options %d Series description (0008,103E), %z Sequence Name (0018,0024).
+ - New filename options %a antenna (coil) number, %e echo number.
+ - Initialize unused portions of NIfTI header to zero so multiple runs always produce identical results.
+ - Supports 3D lossless JPEG saved as [multiple fragments](http://www.nitrc.org/forum/forum.php?thread_id=5872&forum_id=4703).
 
 
 5-May-2016
@@ -107,7 +127,7 @@ mkdir build && cd build
 cmake ..
 make
 ```
-`dcm2niix` will be created in the `bin` folder
+`dcm2niix` will be created in the `bin` subfolder. To install on the system run `make install`.
 
 **optional batch processing version:**
 
@@ -153,6 +173,22 @@ If you use the (obsolete) compiler MinGW on Windows you will want to include the
 
 ```
 g++ -O3 -s -DmyDisableOpenJPEG -DmyDisableZLib -I. main_console.cpp nii_dicom.cpp nifti1_io_core.cpp nii_ortho.cpp nii_dicom_batch.cpp jpg_0XC3.cpp ujpeg.cpp -o dcm2niix  -static-libgcc
+```
+
+##### DISABLING CLASSIC JPEG
+
+DICOM images can be stored as either raw data or compressed using one of many formats as described by the [transfer syntaxes](https://www.nitrc.org/plugins/mwiki/index.php/dcm2nii:MainPage#Transfer_Syntaxes_and_Compressed_Images). One of the compressed formats is the lossy classic JPEG format (which is separate from and predates the lossy JPEG 2000 format). This software comes with the [NanoJPEG](http://keyj.emphy.de/nanojpeg/) library to handle these images. However, you can use the `myDisableClassicJPEG` compiler switch to remove this dependency. The resulting executable will be smaller but will not be able to convert images stored with this format.
+
+```
+g++ -dead_strip -O3 -I. main_console.cpp nii_dicom.cpp jpg_0XC3.cpp nifti1_io_core.cpp nii_ortho.cpp nii_dicom_batch.cpp  -o dcm2niix -DmyDisableClassicJPEG -DmyDisableOpenJPEG -DmyDisableJasper
+```
+
+##### USING LIBJPEG-TURBO TO DECODE CLASSIC JPEG
+
+By default, classic JPEG images will be decoded using the [compact NanoJPEG decoder](http://keyj.emphy.de/nanojpeg/). However, the compiler directive `myTurboJPEG`  will create an executable based on the [libjpeg-turbo](http://www.libjpeg-turbo.org) library. This library is a faster decoder and is the standard for many Linux distributions. On the other hand, the lossy classic JPEG is rarely used for DICOM images, so this compilation has extra dependencies and can result in a larger executable size (for static builds).
+
+```
+g++ -dead_strip -O3 -I. main_console.cpp nii_dicom.cpp jpg_0XC3.cpp ujpeg.cpp nifti1_io_core.cpp nii_ortho.cpp nii_dicom_batch.cpp  -o dcm2niix -DmyDisableOpenJPEG -DmyDisableJasper -DmyTurboJPEG -I/opt/libjpeg-turbo/include /opt/libjpeg-turbo/lib/libturbojpeg.a
 ```
 
 ##### JPEG2000 BUILD
@@ -220,7 +256,7 @@ file ./dcm2niix
 
 You can building the OSX graphical user interface using Xcode. First, Copy contents of "console" folder to /xcode/dcm2/core. Next, open and compile the project "dcm2.xcodeproj" with Xcode 4.6 or later
 
-##### THE QT AND wxWIDGETS GUIs ARE NOT YET SUPPORT - FOLLOWING LINES FOR FUTURE VERSIONS
+##### THE QT AND wxWIDGETS GUIs ARE NOT YET SUPPORTED - FOLLOWING LINES FOR FUTURE VERSIONS
 
 Building QT graphical user interface:
   Open "dcm2.pro" with QTCreator. This should work on OSX and Linux. On Windows the printf information is not redirected to the user interface

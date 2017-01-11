@@ -1,5 +1,10 @@
+cmake_minimum_required(VERSION 2.8)
 project(console)
 set(PROGRAMS dcm2niix)
+
+if(POLICY CMP0054)
+  cmake_policy(SET CMP0054 NEW)
+endif()
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
     # using Clang
@@ -12,13 +17,6 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     # using Visual Studio C++
 endif ()
 
-
-#We now use miniz, removing zlib dependency
-#if(ZLIB_FOUND)
-#  TARGET_LINK_LIBRARIES(dcm2niix z)
-#else(ZLIB_FOUND)
-#  ADD_DEFINITIONS(-DmyDisableZlib)
-#endif(ZLIB_FOUND)
 add_definitions(-DmyDisableJasper)
 add_definitions(-DmyDisableOpenJPEG)
 
@@ -31,6 +29,22 @@ add_executable(dcm2niix
         nii_ortho.cpp
         nii_dicom_batch.cpp)
 
+option(USE_SYSTEM_ZLIB "Use the system zlib" OFF)
+if (USE_SYSTEM_ZLIB)
+  find_package(ZLIB REQUIRED)
+  add_definitions(-DmyDisableMiniZ)
+  target_include_directories(dcm2niix PRIVATE ${ZLIB_INCLUDE_DIRS})
+  target_link_libraries(dcm2niix ${ZLIB_LIBRARIES})
+endif ()
+
+option(USE_SYSTEM_TURBOJPEG "Use the system TurboJPEG" OFF)
+if (USE_SYSTEM_TURBOJPEG)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(TurboJPEG libturbojpeg)
+  add_definitions(-DmyTurboJPEG)
+  target_include_directories(dcm2niix PRIVATE ${TurboJPEG_INCLUDE_DIRS})
+  target_link_libraries(dcm2niix ${TurboJPEG_LIBRARIES})
+endif ()
 
 if (BATCH_VERSION)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
@@ -73,12 +87,22 @@ if (BATCH_VERSION)
             nifti1_io_core.cpp
             nii_ortho.cpp
             nii_dicom_batch.cpp)
+	if(ZLIB_FOUND)
+		ADD_DEFINITIONS(-DmyDisableMiniZ)
+  		TARGET_LINK_LIBRARIES(dcm2niibatch z)
+	endif(ZLIB_FOUND)
+    if (YAML_CPP_LIBRARY)
+        target_link_libraries(dcm2niibatch ${YAML_CPP_LIBRARY})
+    else()
+        target_link_libraries(dcm2niibatch yaml-cpp)
+    endif()
 
-    target_link_libraries(dcm2niibatch yaml-cpp)
 
     if (YAML_CPP_INCLUDE_DIR)
         include_directories(${YAML_CPP_INCLUDE_DIR})
     endif ()
+    
+    list(APPEND PROGRAMS dcm2niibatch)
 endif ()
 
 install(TARGETS ${PROGRAMS} DESTINATION bin)
