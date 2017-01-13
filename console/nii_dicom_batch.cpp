@@ -178,9 +178,9 @@ void geCorrectBvecs(struct TDICOMdata *d, int sliceDir, struct TDTI *vx){
 		return;
     }
     bool col = false;
-    if (d->phaseEncodingRC== 'C')
+    if (d->phaseEncodingRC == 'C')
         col = true;
-    else if (d->phaseEncodingRC!= 'R') {
+    else if (d->phaseEncodingRC != 'R') {
         printWarning("Unable to determine DTI gradients, 0018,1312 should be either R or C");
         return;
     }
@@ -388,12 +388,15 @@ void nii_SaveBIDS(char pathoutname[], struct TDICOMdata d, struct TDCMopts opts,
 	if (d.TE > 0.0) fprintf(fp, "\t\"EchoTime\": %g,\n", d.TE / 1000.0 );
     if (d.TR > 0.0) fprintf(fp, "\t\"RepetitionTime\": %g,\n", d.TR / 1000.0 );
     if ((d.CSA.bandwidthPerPixelPhaseEncode > 0.0) &&  (h->dim[2] > 0) && (h->dim[1] > 0)) {
-		float dwellTime = 0;
-		if (d.phaseEncodingRC =='C')
+		float dwellTime = 0.0f;
+		if  (h->dim[2] == h->dim[2]) //phase encoding does not matter
 			dwellTime =  1.0/d.CSA.bandwidthPerPixelPhaseEncode/h->dim[2];
-		else
+		else if (d.phaseEncodingRC =='R')
+			dwellTime =  1.0/d.CSA.bandwidthPerPixelPhaseEncode/h->dim[2];
+		else if (d.phaseEncodingRC =='C')
 			dwellTime =  1.0/d.CSA.bandwidthPerPixelPhaseEncode/h->dim[1];
-		fprintf(fp, "\t\"EffectiveEchoSpacing\": %g,\n", dwellTime );
+		if (dwellTime != 0.0f) //as long as phase encoding = R or C or does not matter
+			fprintf(fp, "\t\"EffectiveEchoSpacing\": %g,\n", dwellTime );
 
     }
 	bool first = 1;
@@ -412,7 +415,7 @@ void nii_SaveBIDS(char pathoutname[], struct TDICOMdata d, struct TDCMopts opts,
 	}
 	if (d.phaseEncodingRC == 'C')
 		fprintf(fp, "\t\"PhaseEncodingDirection\": \"j");
-	else if (d.phaseEncodingRC == 'C') //Values should be "R"ow, "C"olumn or "?"Unknown
+	else if (d.phaseEncodingRC == 'R') //Values should be "R"ow, "C"olumn or "?"Unknown
 			fprintf(fp, "\t\"PhaseEncodingDirection\": \"i");
 	//phaseEncodingDirectionPositive has one of three values: UNKNOWN (-1), NEGATIVE (0), POSITIVE (1)
 	//However, DICOM and NIfTI are reversed in the j (ROW) direction
@@ -1509,9 +1512,10 @@ int saveDcm2Nii(int nConvert, struct TDCMsort dcmSort[],struct TDICOMdata dcmLis
     if (dcmList[indx0].gantryTilt != 0.0) {
         if (dcmList[indx0].isResampled)
             printMessage("Tilt correction skipped: 0008,2111 reports RESAMPLED\n");
-        else if (opts.isTiltCorrect)
+        else if (opts.isTiltCorrect) {
             imgM = nii_saveNII3Dtilt(pathoutname, &hdr0, imgM,opts, sliceMMarray, dcmList[indx0].gantryTilt, dcmList[indx0].manufacturer);
-        else
+            strcat(pathoutname,"_Tilt");
+        } else
             printMessage("Tilt correction skipped\n");
     }
     if (sliceMMarray != NULL) {
@@ -1930,11 +1934,13 @@ int nii_loadDir(struct TDCMopts* opts) {
     if (isFile) //if user passes ~/dicom/mr1.dcm we will look at all files in ~/dicom
         dropFilenameFromPath(opts->indir);//getParentFolder(opts.indir, opts.indir);
     dropTrailingFileSep(opts->indir);
-    if (strlen(opts->outdir) < 1)
+    if (strlen(opts->outdir) < 1) {
         strcpy(opts->outdir,opts->indir);
-    dropTrailingFileSep(opts->outdir);
-    if (is_fileNotDir(opts->outdir)) //if user passes ~/dicom/mr1.dcm we will look at all files in ~/dicom
-        dropFilenameFromPath(opts->outdir);//getParentFolder(opts.indir, opts.indir);
+    	dropTrailingFileSep(opts->outdir);
+    	if (is_fileNotDir(opts->outdir)) //if user passes ~/dicom/mr1.dcm we will look at all files in ~/dicom
+        	dropFilenameFromPath(opts->outdir);//getParentFolder(opts.indir, opts.indir);
+    } else
+    	dropTrailingFileSep(opts->outdir);
     if (!is_dir(opts->outdir,true)) {
 		#ifdef myUseInDirIfOutDirUnavailable
 		printWarning("Output folder invalid %s will try %s\n",opts->outdir,opts->indir);
