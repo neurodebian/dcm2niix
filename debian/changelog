@@ -1,9 +1,9 @@
-dcm2niix (20161101+git63-gb7ffa37-1) neurodebian; urgency=medium
+dcm2niix (20161101+git66-g672f4d2-1) neurodebian; urgency=medium
 
   * New upstream snapshot -- various bug fixes (handling of non-existing
-    output directory etc)
+    output directory, json output, etc)
 
- -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 11 Jan 2017 10:48:42 -0500
+ -- Yaroslav Halchenko <debian@onerussian.com>  Mon, 16 Jan 2017 12:45:53 -0500
 
 dcm2niix (20160921+git16-g0339407-1) neurodebian; urgency=medium
 
