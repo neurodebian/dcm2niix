@@ -1,3 +1,11 @@
+dcm2niix (1:1.0.20170130-1) neurodebian; urgency=medium
+
+  * Introduced 1: epoch version prefix to conform to current upstream
+    version format
+  * Fresh release should resolve issues with json output
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Mon, 30 Jan 2017 12:48:10 -0500
+
 dcm2niix (20161101+git66-g672f4d2-1) neurodebian; urgency=medium
 
   * New upstream snapshot -- various bug fixes (handling of non-existing
