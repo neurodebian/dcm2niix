@@ -1,6 +1,8 @@
 #include <stdbool.h>
 #include <string.h>
+#ifndef HAVE_R
 #include "nifti1.h"
+#endif
 
 #ifndef MRIpro_nii_dcm_h
 
@@ -10,15 +12,16 @@
 extern "C" {
 #endif
 
-#ifdef myEnableJasper
-    #define kDCMvers "1Jan2017j" //JASPER for JPEG2000
-#else
-	#ifdef myDisableOpenJPEG
-    #define kDCMvers "1Jan2017" //no decompressor
-	#else
-    #define kDCMvers "1Jan2017o" //OPENJPEG for JPEG2000
-    #endif
-#endif
+ #ifdef myEnableJasper
+  #define kDCMsuf " (jasper build)"
+ #else
+  #ifdef myDisableOpenJPEG
+    #define kDCMsuf ""
+  #else
+    #define kDCMsuf " (openJPEG build)"
+  #endif
+ #endif
+ #define kDCMvers "v1.0.20170130" kDCMsuf
 
 static const int kMaxDTI4D = 4000; //#define kMaxDTIv  4000
 #define kDICOMStr 40
