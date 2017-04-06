@@ -15,6 +15,10 @@ gitver = $(shell [ -x /usr/bin/git ] && git describe --tags --match 'release/[0-
 %:
 	dh $@ --buildsystem=cmake
 
+override_dh_configure:
+	dh_configure -- \
+		-DBATCH_VERSION=ON
+
 override_dh_clean:
 	dh_clean
 	# remove stuff we don't carry in the upstream tarball
