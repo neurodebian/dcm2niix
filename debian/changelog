@@ -4,6 +4,8 @@ dcm2niix (1:1.0.20170130-2) neurodebian; urgency=medium
     - Updated Homepage to point to github repo
   * debian/rules
     - enable building dcm2niixbatch. Also added libyaml-cpp-dev bdependency
+      (and libboost-dev which it needs but not installs on older 
+      debian/ubuntus)
 
  -- Yaroslav Halchenko <debian@onerussian.com>  Thu, 06 Apr 2017 14:31:56 -0400
 
