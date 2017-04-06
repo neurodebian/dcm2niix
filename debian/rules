@@ -15,8 +15,8 @@ gitver = $(shell [ -x /usr/bin/git ] && git describe --tags --match 'release/[0-
 %:
 	dh $@ --buildsystem=cmake
 
-override_dh_configure:
-	dh_configure -- \
+override_dh_auto_configure:
+	dh_auto_configure -- \
 		-DBATCH_VERSION=ON
 
 override_dh_clean:
