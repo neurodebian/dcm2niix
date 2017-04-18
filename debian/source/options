@@ -1,0 +1,3 @@
+# ignore all the stuff we are presently no including in the source tarball
+# (some binaries, some stuff with difficult licenses, ...)
+extend-diff-ignore = "(^|/)(dcm2laz/.*|qtGui/.*|wxWidgets/.*|xcode/.*|.*\.command|unused.*|.*_binary)$"

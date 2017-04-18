@@ -9,16 +9,20 @@ upstreamver = $(shell echo $(debver) | cut -d '-' -f 1,1 )
 # then described this commit relative to the last release tag (release/...)
 # If this should make any sense the local upstream branch must track upstream's
 # master or whatever other source branch.
-gitver = $(shell [ -x /usr/bin/git ] && git describe --tags --match 'release/[0-9].[0-9]*.[0-9]*' $$(git merge-base -a HEAD master) | sed -e 's,^release/,,' -e 's/-/+git/')
+gitver = $(shell [ -x /usr/bin/git ] && git describe --tags --match 'v[0-9].[0-9]*.[0-9]*' $$(git merge-base -a HEAD master) | sed -e 's,^v,,' -e 's/-/+git/')
+
+export DH_VERBOSE = 1
 
 # one ring to rule them all ...
 %:
-	dh $@ --buildsystem=cmake
+	dh $@ --buildsystem=cmake --builddirectory=build
 
-override_dh_clean:
-	dh_clean
-	# remove stuff we don't carry in the upstream tarball
-	rm -rf dcm2laz qtGui wxWidgets xcode *.command console/unused
+override_dh_auto_configure:
+	dh_auto_configure -- \
+	  -DUSE_STATIC_RUNTIME:BOOL=OFF \
+	  -DUSE_SYSTEM_TURBOJPEG:BOOL=ON \
+	  -DUSE_SYSTEM_ZLIB:BOOL=ON \
+	  -DBATCH_VERSION:BOOL=ON
 
 dfsg-source-tree:
 	# at this point we are golden
