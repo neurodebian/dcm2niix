@@ -50,7 +50,7 @@
     #include <jasper/jasper.h>
 #endif
 #ifndef myDisableOpenJPEG
-    #include <openjpeg-2.1/openjpeg.h>//"openjpeg.h"
+    #include <openjpeg.h>
 
 #ifdef myEnableJasper
 ERROR: YOU CAN NOT COMPILE WITH myEnableJasper AND NOT myDisableOpenJPEG OPTIONS SET SIMULTANEOUSLY
@@ -618,7 +618,7 @@ struct TDICOMdata clear_dicom_data() {
         d.xyzDim[i] = 1;
     for (int i = 0; i < 7; i++)
         d.orient[i] = 0.0f;
-    d.patientPositionSequentialRepeats = 0;//d.isHasMixed = false;
+    d.patientPositionSequentialRepeats = 0;
     d.isHasPhase = false;
     d.isHasMagnitude = false;
     d.sliceOrient = kSliceOrientUnknown;
@@ -630,6 +630,7 @@ struct TDICOMdata clear_dicom_data() {
     strcpy(d.studyTime, "11:11:11");
     strcpy(d.manufacturersModelName, "N/A");
     strcpy(d.procedureStepDescription, "");
+    strcpy(d.bodyPartExamined,"");
     d.dateTime = (double)19770703150928.0;
     d.acquisitionTime = 0.0f;
     d.acquisitionDate = 0.0f;
@@ -637,11 +638,13 @@ struct TDICOMdata clear_dicom_data() {
     strcpy(d.seriesDescription, "T1_mprage");
     strcpy(d.sequenceName, "T1");
     strcpy(d.scanningSequence, "tfl3d1_ns");
+    strcpy(d.sequenceVariant, "tfl3d1_ns");
     d.manufacturer = kMANUFACTURER_UNKNOWN;
     d.isPlanarRGB = false;
     d.lastScanLoc = NAN;
-    d.TR = 0;
-    d.TE = 0;
+    d.TR = 0.0;
+    d.TE = 0.0;
+    d.TI = 0.0;
     d.flipAngle = 0.0;
     d.fieldStrength = 0.0;
     d.numberOfDynamicScans = 0;
@@ -650,8 +653,13 @@ struct TDICOMdata clear_dicom_data() {
     d.patientPositionNumPhilips = 0;
     d.imageBytes = 0;
     d.intenScale = 1;
+    d.intenScalePhilips = 0;
     d.intenIntercept = 0;
     d.gantryTilt = 0.0;
+    d.radionuclidePositronFraction = 0.0;
+    d.radionuclideTotalDose = 0.0;
+    d.radionuclideHalfLife = 0.0;
+    d.doseCalibrationFactor = 0.0;
     d.seriesNum = 1;
     d.acquNum = 0;
     d.imageNum = 1;
@@ -902,7 +910,7 @@ float csaMultiFloat (unsigned char buff[], int nItems, float Floats[], int *Item
         // Storage order is always little-endian, so byte-swap required values if necessary
         if (!littleEndianPlatform())
             nifti_swap_4bytes(1, &itemCSA.xx2_Len);
-        
+
         if (itemCSA.xx2_Len > 0) {
             char * cString = (char *)malloc(sizeof(char) * (itemCSA.xx2_Len));
             memcpy(cString, &buff[lPos], itemCSA.xx2_Len); //TPX memcpy(&cString, &buff[lPos], sizeof(cString));
@@ -928,7 +936,7 @@ bool csaIsPhaseMap (unsigned char buff[], int nItems) {
         // Storage order is always little-endian, so byte-swap required values if necessary
         if (!littleEndianPlatform())
             nifti_swap_4bytes(1, &itemCSA.xx2_Len);
-        
+
         if (itemCSA.xx2_Len > 0) {
 //#ifdef _MSC_VER
             char * cString = (char *)malloc(sizeof(char) * (itemCSA.xx2_Len + 1));
@@ -1259,13 +1267,6 @@ void changeExt (char *file_name, const char* ext) {
     }
 } //changeExt()
 
-float PhilipsPreciseVal (float lPV, float lRS, float lRI, float lSS) {
-    if ((lRS*lSS) == 0) //avoid divide by zero
-        return 0.0;
-    else
-        return (lPV * lRS + lRI) / (lRS * lSS);
-}
-
 struct TDICOMdata  nii_readParRec (char * parname, int isVerbose, struct TDTI4D *dti4D) {
     struct TDICOMdata d = clear_dicom_data();
     strcpy(d.protocolName, ""); //erase dummy with empty
@@ -1308,7 +1309,7 @@ struct TDICOMdata  nii_readParRec (char * parname, int isVerbose, struct TDTI4D 
 #define	kv3	46
 #define	kASL	48
     char buff[LINESZ];
-    float intenScalePhilips = 0.0f;
+    //float intenScalePhilips = 0.0f;
     float maxBValue = 0.0f;
     float maxDynTime = 0.0f;
     float minDynTime = 999999.0f;
@@ -1435,7 +1436,7 @@ struct TDICOMdata  nii_readParRec (char * parname, int isVerbose, struct TDTI4D 
 			d.bitsStored = (int) cols[kBitsPerVoxel];
             d.intenIntercept = cols[kRI];
             d.intenScale = cols[kRS];
-            intenScalePhilips = cols[kSS];
+            d.intenScalePhilips = cols[kSS];
         } else {
             if ((d.xyzDim[1] != cols[kXdim]) || (d.xyzDim[2] != cols[kYdim]) || (d.bitsAllocated != cols[kBitsPerVoxel]) ) {
                 printError("Slice dimensions or bit depth varies %s\n", parname);
@@ -1453,6 +1454,21 @@ struct TDICOMdata  nii_readParRec (char * parname, int isVerbose, struct TDTI4D 
         if (cols[kImageType] != 0) d.isHasPhase = true;
         if (cols[kDynTime] > maxDynTime) maxDynTime = cols[kDynTime];
         if (cols[kDynTime] < minDynTime) minDynTime = cols[kDynTime];
+        if ((cols[kEcho] == 1) && (cols[kDyn] == 1) && (cols[kCardiac] == 1) && (cols[kGradientNumber] == 1)) {
+			if (cols[kSlice] == 1) {
+				d.patientPosition[1] = cols[kPositionRL];
+            	d.patientPosition[2] = cols[kPositionAP];
+            	d.patientPosition[3] = cols[kPositionFH];
+			}
+			if (d.patientPositionNumPhilips < kMaxDTI4D) {
+				dti4D->S[d.patientPositionNumPhilips].sliceNumberMrPhilips = round(cols[kSlice]);
+				if ((d.patientPositionNumPhilips > 0) && (dti4D->S[d.patientPositionNumPhilips].sliceNumberMrPhilips < dti4D->S[d.patientPositionNumPhilips-1].sliceNumberMrPhilips)) {
+					d.isSlicesSpatiallySequentialPhilips = false;
+					//printMessage("slices are not contiguous\n");
+				}
+			}
+			d.patientPositionNumPhilips++;
+        }
         if (cols[kGradientNumber] > 0) {
 			/*int dir = (int) cols[kGradientNumber];
             if ((dir > 0) && (cols[kbval] > 0.0) && (cols[kv1] == 0.0) && (cols[kv1] == 0.0) && (cols[kv1] == 0.0) ) {
@@ -1585,21 +1601,6 @@ struct TDICOMdata  nii_readParRec (char * parname, int isVerbose, struct TDTI4D 
     		printWarning("Reported TR=%gms, measured TR=%gms (prospect. motion corr.?)\n", d.TR, TRms);
     	d.TR = TRms;
     }
-    if (intenScalePhilips != 0.0) {
-        //printMessage("Philips Precise RS:RI:SS = %g:%g:%g (see PMC3998685)\n",d.intenScale,d.intenIntercept,intenScalePhilips);
-        //we will report calibrated "FP" values http://www.ncbi.nlm.nih.gov/pmc/articles/PMC3998685/
-        //# === PIXEL VALUES =============================================================
-		//#  PV = pixel value in REC file, FP = floating point value, DV = displayed value on console
-		//#  RS = rescale slope,           RI = rescale intercept,    SS = scale slope
-		//#  DV = PV * RS + RI             FP = DV / (RS * SS)
-        float l0 = PhilipsPreciseVal (0, d.intenScale, d.intenIntercept, intenScalePhilips);
-        float l1 = PhilipsPreciseVal (1, d.intenScale, d.intenIntercept, intenScalePhilips);
-        if (l0 != l1) {
-            d.intenIntercept = l0;
-            d.intenScale = l1-l0;
-        }
-    }
-
     return d;
 } //nii_readParRec()
 
@@ -1739,7 +1740,8 @@ unsigned char * nii_flipImgZ(unsigned char* bImg, struct nifti_1_header *hdr){
 
 unsigned char * nii_reorderSlices(unsigned char* bImg, struct nifti_1_header *h, struct TDTI4D *dti4D){
     //flip slice order - Philips scanners can save data in non-contiguous order
-    if ((h->dim[3] < 2) || (h->dim[4] > 1)) return bImg;
+    //if ((h->dim[3] < 2) || (h->dim[4] > 1)) return bImg;
+    if (h->dim[3] < 2) return bImg;
     if (h->dim[3] >= kMaxDTI4D) {
     	printWarning("Unable to reorder slices (%d > %d)\n", h->dim[3], kMaxDTI4D);
     	return bImg;
@@ -1754,11 +1756,11 @@ unsigned char * nii_reorderSlices(unsigned char* bImg, struct nifti_1_header *h,
     unsigned char *srcImg = (unsigned char *)malloc(volBytes);
     for (int v = 0; v < dim4to7; v++) {
     	size_t volStart = v * volBytes;
-    	memcpy(&srcImg[volStart], &bImg[volStart], volBytes); //dest, src, size
+    	memcpy(&srcImg[0], &bImg[volStart], volBytes); //dest, src, size
     	for (int z = 0; z < h->dim[3]; z++) { //for each slice
 			int src = dti4D->S[z].sliceNumberMrPhilips - 1; //-1 as Philips indexes slices from 1 not 0
 			if ((src < 0) || (src >= h->dim[3])) continue;
-			memcpy(&bImg[volStart+(src*sliceBytes)], &srcImg[volStart+(z*sliceBytes)], sliceBytes); //dest, src, size
+			memcpy(&bImg[volStart+(src*sliceBytes)], &srcImg[z*sliceBytes], sliceBytes); //dest, src, size
     	}
     }
     free(srcImg);
@@ -2527,6 +2529,7 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
 #define  kImageTypeTag 0x0008+(0x0008 << 16 )
 #define  kStudyDate 0x0008+(0x0020 << 16 )
 #define  kAcquisitionDate 0x0008+(0x0022 << 16 )
+#define  kAcquisitionDateTime 0x0008+(0x002A << 16 )
 #define  kStudyTime 0x0008+(0x0030 << 16 )
 #define  kAcquisitionTime 0x0008+(0x0032 << 16 )
 #define  kManufacturer 0x0008+(0x0070 << 16 )
@@ -2536,17 +2539,23 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
 #define  kComplexImageComponent (uint32_t) 0x0008+(0x9208 << 16 )//'0008' '9208' 'CS' 'ComplexImageComponent'
 #define  kPatientName 0x0010+(0x0010 << 16 )
 #define  kPatientID 0x0010+(0x0020 << 16 )
+#define  kBodyPartExamined 0x0018+(0x0015 << 16)
 #define  kScanningSequence 0x0018+(0x0020 << 16)
+#define  kSequenceVariant 0x0018+(0x0021 << 16)
 #define  kMRAcquisitionType 0x0018+(0x0023 << 16)
 #define  kSequenceName 0x0018+(0x0024 << 16)
 #define  kZThick  0x0018+(0x0050 << 16 )
 #define  kTR  0x0018+(0x0080 << 16 )
 #define  kTE  0x0018+(0x0081 << 16 )
+#define  kTI  0x0018+(0x0082 << 16) // Inversion time
 #define  kEchoNum  0x0018+(0x0086 << 16 ) //IS
 #define  kMagneticFieldStrength  0x0018+(0x0087 << 16 ) //DS
 #define  kZSpacing  0x0018+(0x0088 << 16 ) //'DS' 'SpacingBetweenSlices'
 #define  kPhaseEncodingSteps  0x0018+(0x0089 << 16 ) //'IS'
 #define  kProtocolName  0x0018+(0x1030<< 16 )
+#define  kRadionuclideTotalDose  0x0018+(0x1074<< 16 )
+#define  kRadionuclideHalfLife  0x0018+(0x1075<< 16 )
+#define  kRadionuclidePositronFraction  0x0018+(0x1076<< 16 )
 #define  kGantryTilt  0x0018+(0x1120  << 16 )
 #define  kXRayExposure  0x0018+(0x1152  << 16 )
 #define  kFlipAngle  0x0018+(0x1314  << 16 )
@@ -2586,12 +2595,14 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
 #define  kDiffusionBFactorGE  0x0043+(0x1039 << 16 ) //IS dicm2nii's SlopInt_6_9
 #define  kCoilSiemens  0x0051+(0x100F << 16 )
 #define  kLocationsInAcquisition  0x0054+(0x0081 << 16 )
+#define  kDoseCalibrationFactor  0x0054+(0x1322<< 16 )
 #define  kIconImageSequence 0x0088+(0x0200 << 16 )
 #define  kDiffusionBFactor  0x2001+(0x1003 << 16 )// FL
 #define  kSliceNumberMrPhilips 0x2001+(0x100A << 16 ) //IS Slice_Number_MR
 #define  kNumberOfSlicesMrPhilips 0x2001+(0x1018 << 16 )//SL 0x2001, 0x1018 ), "Number_of_Slices_MR"
 #define  kSliceOrient  0x2001+(0x100B << 16 )//2001,100B Philips slice orientation (TRANSVERSAL, AXIAL, SAGITTAL)
 //#define  kLocationsInAcquisitionPhilips  0x2001+(0x1018 << 16 ) //
+//#define  kStackSliceNumber  0x2001+(0x1035 << 16 )//? Potential way to determine slice order for Philips?
 #define  kNumberOfDynamicScans  0x2001+(0x1081 << 16 )//'2001' '1081' 'IS' 'NumberOfDynamicScans'
 #define  kMRAcquisitionTypePhilips 0x2005+(0x106F << 16)
 #define  kAngulationAP 0x2005+(0x1071 << 16)//'2005' '1071' 'FL' 'MRStackAngulationAP'
@@ -2628,7 +2639,8 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
         	printMessage("DICOM appears corrupt: first group:element should be 0x0002:0x0000\n");
     }
     char vr[2];
-    float intenScalePhilips = 0.0;
+    //float intenScalePhilips = 0.0;
+    char acquisitionDateTimeTxt[kDICOMStr] = "";
     bool isEncapsulatedData = false;
     bool isOrient = false;
     bool isIconImageSequence = false;
@@ -2796,6 +2808,11 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
                 dcmStr (lLength, &buffer[lPos], acquisitionDateTxt);
                 d.acquisitionDate = atof(acquisitionDateTxt);
             	break;
+            case kAcquisitionDateTime:
+            	//char acquisitionDateTimeTxt[kDICOMStr];
+                dcmStr (lLength, &buffer[lPos], acquisitionDateTimeTxt);
+                //printMessage("%s\n",acquisitionDateTimeTxt);
+            	break;
             case kStudyDate:
                 dcmStr (lLength, &buffer[lPos], d.studyDate);
                 break;
@@ -2810,6 +2827,7 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
                 char acquisitionTimeTxt[kDICOMStr];
                 dcmStr (lLength, &buffer[lPos], acquisitionTimeTxt);
                 d.acquisitionTime = atof(acquisitionTimeTxt);
+                //printMessage("%s\n",acquisitionTimeTxt);
                 break;
             case 	kStudyTime :
                 dcmStr (lLength, &buffer[lPos], d.studyTime);
@@ -2928,6 +2946,9 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
             case 	kLocationsInAcquisitionGE:
                 locationsInAcquisitionGE = dcmInt(lLength,&buffer[lPos],d.isLittleEndian);
                 break;
+            case kDoseCalibrationFactor :
+                d.doseCalibrationFactor = dcmStrFloat(lLength, &buffer[lPos]);
+                break;
             case 	kBitsAllocated :
                 d.bitsAllocated = dcmInt(lLength,&buffer[lPos],d.isLittleEndian);
                 break;
@@ -2942,6 +2963,9 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
                 break;
             case 	kTE :
             	d.TE = dcmStrFloat(lLength, &buffer[lPos]);
+                break;
+            case 	kTI :
+                d.TI = dcmStrFloat(lLength, &buffer[lPos]);
                 break;
             case kEchoNum :
                 d.echoNum =  dcmStrInt(lLength, &buffer[lPos]);
@@ -2958,6 +2982,15 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
             case kFlipAngle :
             	d.flipAngle = dcmStrFloat(lLength, &buffer[lPos]);
             	break;
+            case kRadionuclideTotalDose :
+                d.radionuclideTotalDose = dcmStrFloat(lLength, &buffer[lPos]);
+                break;
+            case kRadionuclideHalfLife :
+                d.radionuclideHalfLife = dcmStrFloat(lLength, &buffer[lPos]);
+                break;
+            case kRadionuclidePositronFraction :
+                d.radionuclidePositronFraction = dcmStrFloat(lLength, &buffer[lPos]);
+                break;
             case kGantryTilt :
                 d.gantryTilt = dcmStrFloat(lLength, &buffer[lPos]);
                 break;
@@ -2972,7 +3005,7 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
                 break;
             case kPhilipsSlope :
                 if ((lLength == 4) && (d.manufacturer == kMANUFACTURER_PHILIPS))
-                    intenScalePhilips = dcmFloat(lLength, &buffer[lPos],d.isLittleEndian);
+                    d.intenScalePhilips = dcmFloat(lLength, &buffer[lPos],d.isLittleEndian);
                 break;
 
             case 	kIntercept :
@@ -3000,6 +3033,11 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
             case kIconImageSequence:
                 isIconImageSequence = true;
                 break;
+            /*case kStackSliceNumber: { //https://github.com/Kevin-Mattheus-Moerman/GIBBON/blob/master/dicomDict/PMS-R32-dict.txt
+            	int stackSliceNumber = dcmInt(lLength,&buffer[lPos],d.isLittleEndian);
+            	printf("%d\n",stackSliceNumber);
+            	break;
+			}*/
             case 	kNumberOfDynamicScans:
                 d.numberOfDynamicScans =  dcmStrInt(lLength, &buffer[lPos]);
                 break;
@@ -3008,8 +3046,16 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
                 if (lLength > 1) d.is3DAcq = (buffer[lPos]=='3') && (toupper(buffer[lPos+1]) == 'D');
                 #endif
                 break;
+            case kBodyPartExamined : {
+                dcmStr (lLength, &buffer[lPos], d.bodyPartExamined);
+                break;
+            }
             case kScanningSequence : {
                 dcmStr (lLength, &buffer[lPos], d.scanningSequence);
+                break;
+            }
+            case kSequenceVariant : {
+                dcmStr (lLength, &buffer[lPos], d.sequenceVariant);
                 break;
             }
             case kSequenceName : {
@@ -3059,7 +3105,6 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
                         dti4D->S[0].V[2] = d.CSA.dtiV[2];
                         dti4D->S[0].V[3] = d.CSA.dtiV[3];
                     }
-
                     d.CSA.dtiV[0] = dcmFloat(lLength, &buffer[lPos],d.isLittleEndian);
                     if ((d.CSA.numDti > 1) && (d.CSA.numDti < kMaxDTI4D))
                         dti4D->S[d.CSA.numDti-1].V[0] = d.CSA.dtiV[0];
@@ -3070,27 +3115,35 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
             case kSliceNumberMrPhilips :
             	if (d.manufacturer != kMANUFACTURER_PHILIPS)
             		break;
-
-            	if (d.patientPositionNumPhilips >= kMaxDTI4D) {
+            	/*if ((d.patientPositionNumPhilips >= kMaxDTI4D) || (d.patientPositionNumPhilips >= locationsInAcquisitionPhilips)) {
             		d.patientPositionNumPhilips++;
             		break;
-            	}
-            	int sliceNumber;
+            	}*/
+				if ((locationsInAcquisitionPhilips > 0) && (d.patientPositionNumPhilips == locationsInAcquisitionPhilips))
+					break; //we have acquired all slices in volume (e.g. all volumes after 1st for XYZT storage
+				int sliceNumber;
             	sliceNumber = dcmStrInt(lLength, &buffer[lPos]);
-                dti4D->S[d.patientPositionNumPhilips].sliceNumberMrPhilips = sliceNumber;
-				if ((d.patientPositionNumPhilips > 0) && (abs(dti4D->S[d.patientPositionNumPhilips].sliceNumberMrPhilips - dti4D->S[d.patientPositionNumPhilips -1].sliceNumberMrPhilips) != 1) )
-						d.isSlicesSpatiallySequentialPhilips = false; //slices not sequential (1,2,3,4 or 4,3,2,1) but 4,3,1,2
+				if ((d.patientPositionNumPhilips > 0) && (sliceNumber == dti4D->S[d.patientPositionNumPhilips-1].sliceNumberMrPhilips)  )
+					break; //repeated spatial position (e.g. data saved XYTZ so several time points
+				if (d.patientPositionNumPhilips >= kMaxDTI4D) {
+            		d.patientPositionNumPhilips++; //fail: out of space
+            		break;
+            	}
+				dti4D->S[d.patientPositionNumPhilips].sliceNumberMrPhilips = sliceNumber;
+				if ((d.patientPositionNumPhilips > 0) && (abs(dti4D->S[d.patientPositionNumPhilips].sliceNumberMrPhilips - dti4D->S[d.patientPositionNumPhilips -1].sliceNumberMrPhilips) > 1) )
+					d.isSlicesSpatiallySequentialPhilips = false; //slices not sequential (1,2,3,4 or 4,3,2,1) but 4,3,1,2
             	d.patientPositionNumPhilips++;
             	//Philips can save 3D acquisitions in a single file with slices stored in non-sequential order. We need to know the first and final spatial position
             	if (sliceNumber == 1) {
             		for (int k = 0; k < 4; k++)
 						patientPositionStartPhilips[k] = patientPosition[k];
             	}
-            	//patientPositionNum
             	if (sliceNumber == locationsInAcquisitionPhilips) {
             		for (int k = 0; k < 4; k++)
 						patientPositionEndPhilips[k] = patientPosition[k];
             	}
+				if (isVerbose > 1)
+					printMessage("slice %d is spatial position %d\n", d.patientPositionNumPhilips, sliceNumber);
             	break;
             case kNumberOfSlicesMrPhilips :
             	if (d.manufacturer != kMANUFACTURER_PHILIPS)
@@ -3200,20 +3253,43 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
         } //if nest
         //#ifdef MY_DEBUG
         if (isVerbose > 1) {
-        	if ((lLength > 8) && (lLength < 128)) { //if length is greater than 8 bytes the data must be a string [or image data]
+        	if ((lLength > 12) && (lLength < 128)) { //if length is greater than 8 bytes (+4 hdr) the data must be a string [or image data]
         		char tagStr[kDICOMStr];
             	tagStr[0] = 'X'; //avoid compiler warning: orientStr filled by dcmStr
                 dcmStr (lLength, &buffer[lPos], tagStr);
-            	printMessage(" Tag\t%04x,%04x\tSize=%u\tOffset=%ld\tnest=%d\t%s\n",   groupElement & 65535,groupElement>>16, lLength, lPos, nest, tagStr);
-            }	else
+                if (strlen(tagStr) > 1) {
+                	for (int pos = 0; pos<strlen(tagStr); pos ++)
+						if ((tagStr[pos] == '<') || (tagStr[pos] == '>') || (tagStr[pos] == ':')
+            				|| (tagStr[pos] == '"') || (tagStr[pos] == '\\') || (tagStr[pos] == '/')
+           					|| (tagStr[pos] == '^') || (tagStr[pos] < 33)
+           					|| (tagStr[pos] == '*') || (tagStr[pos] == '|') || (tagStr[pos] == '?'))
+            					tagStr[pos] = 'x';
+				}
+            	printMessage(" Tag\t%04x,%04x\tSize=%u\tOffset=%ld\t%s\n",   groupElement & 65535,groupElement>>16, lLength, lPos, tagStr);
+            	//printMessage(" Tag\t%04x,%04x\tSize=%u\tOffset=%ld\tnest=%d\t%s\n",   groupElement & 65535,groupElement>>16, lLength, lPos, nest, tagStr);
+            } else
             	printMessage(" Tag\t%04x,%04x\tSize=%u\tOffset=%ld\tnest=%d\n",   groupElement & 65535,groupElement>>16, lLength, lPos, nest);
         }   //printMessage(" tag=%04x,%04x length=%u pos=%ld %c%c nest=%d\n",   groupElement & 65535,groupElement>>16, lLength, lPos,vr[0], vr[1], nest);
         //#endif
         lPos = lPos + (lLength);
         //printMessage("%d\n",d.imageStart);
     } //while d.imageStart == 0
-
     free (buffer);
+    //Recent Philips images include DateTime (0008,002A) but not separate date and time (0008,0022 and 0008,0032)
+    #define kYYYYMMDDlen 8 //how many characters to encode year,month,day in "YYYYDDMM" format
+    if ((strlen(acquisitionDateTimeTxt) > (kYYYYMMDDlen+5)) && (!isFloatDiff(d.acquisitionTime, 0.0f)) && (!isFloatDiff(d.acquisitionDate, 0.0f)) ) {
+		// 20161117131643.80000 -> date 20161117 time 131643.80000
+		//printMessage("acquisitionDateTime %s\n",acquisitionDateTimeTxt);
+    	char acquisitionDateTxt[kDICOMStr];
+        strncpy(acquisitionDateTxt, acquisitionDateTimeTxt, kYYYYMMDDlen);
+		acquisitionDateTxt[kYYYYMMDDlen] = '\0'; // IMPORTANT!
+        d.acquisitionDate = atof(acquisitionDateTxt);
+        char acquisitionTimeTxt[kDICOMStr];
+		int timeLen = strlen(acquisitionDateTimeTxt) - kYYYYMMDDlen;
+        strncpy(acquisitionTimeTxt, &acquisitionDateTimeTxt[kYYYYMMDDlen], timeLen);
+		acquisitionTimeTxt[timeLen] = '\0'; // IMPORTANT!
+		d.acquisitionTime = atof(acquisitionTimeTxt);
+    }
     d.dateTime = (atof(d.studyDate)* 1000000) + atof(d.studyTime);
     //printMessage("slices in Acq %d %d\n",d.locationsInAcquisition,locationsInAcquisitionPhilips);
     if ((d.manufacturer == kMANUFACTURER_PHILIPS) && (d.locationsInAcquisition == 0))
@@ -3279,34 +3355,29 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
 	//     	else
 	//     		printWarning("Spatial orientation ambiguous (tag 0020,0037 not found): %s\n", fname);
 	//     }
-	if ((d.numberOfDynamicScans < 2) && (!d.isSlicesSpatiallySequentialPhilips) && (patientPositionStartPhilips[1] != NAN) && (patientPositionEndPhilips[1] != NAN)) {
+	if ((d.numberOfDynamicScans < 2) && (!d.isSlicesSpatiallySequentialPhilips) && (!isnan(patientPositionStartPhilips[1])) && (!isnan(patientPositionEndPhilips[1]))) {
 		//to do: check for d.numberOfDynamicScans > 1
 		for (int k = 0; k < 4; k++) {
 			d.patientPosition[k] = patientPositionStartPhilips[k];
 			d.patientPositionLast[k] = patientPositionEndPhilips[k];
 		}
-		printMessage("<<< Slices not spatially contiguous: please check output [new feature]\n");
+		printMessage("Slices not spatially contiguous: please check output [new feature]\n");
     }
     if (isVerbose) {
         printMessage("%s\n patient position\t%g\t%g\t%g\n",fname, d.patientPosition[1],d.patientPosition[2],d.patientPosition[3]);
-        printMessage(" acq %d img %d ser %ld dim %dx%dx%d mm %gx%gx%g offset %d dyn %d loc %d valid %d ph %d mag %d posReps %d nDTI %d 3d %d bits %d littleEndian %d echo %d coil %d\n",d.acquNum,d.imageNum,d.seriesNum,d.xyzDim[1],d.xyzDim[2],d.xyzDim[3],d.xyzMM[1],d.xyzMM[2],d.xyzMM[3],d.imageStart, d.numberOfDynamicScans, d.locationsInAcquisition, d.isValid, d.isHasPhase, d.isHasMagnitude,d.patientPositionSequentialRepeats, d.CSA.numDti, d.is3DAcq, d.bitsAllocated, d.isLittleEndian, d.echoNum, d.coilNum);
+        printMessage(" acq %d img %d ser %ld dim %dx%dx%d mm %gx%gx%g offset %d dyn %d loc %d valid %d ph %d mag %d posReps %d nDTI %d 3d %d bits %d littleEndian %d echo %d coil %d TE %g TR %g\n",d.acquNum,d.imageNum,d.seriesNum,d.xyzDim[1],d.xyzDim[2],d.xyzDim[3],d.xyzMM[1],d.xyzMM[2],d.xyzMM[3],d.imageStart, d.numberOfDynamicScans, d.locationsInAcquisition, d.isValid, d.isHasPhase, d.isHasMagnitude,d.patientPositionSequentialRepeats, d.CSA.numDti, d.is3DAcq, d.bitsAllocated, d.isLittleEndian, d.echoNum, d.coilNum, d.TE, d.TR);
         if (d.CSA.dtiV[0] > 0)
         	printMessage(" DWI bxyz %g %g %g %g\n", d.CSA.dtiV[0], d.CSA.dtiV[1], d.CSA.dtiV[2], d.CSA.dtiV[3]);
     }
-    if (d.CSA.numDti >= kMaxDTI4D) {
-        printError("Unable to convert DTI [increase kMaxDTI4D]\n");
+    if (d.patientPositionNumPhilips >= kMaxDTI4D) {
+        printError("Too many 2D slices in a single file [recompile with increased kMaxDTI4D] detected=%d, max = %d\n", d.patientPositionNumPhilips, kMaxDTI4D);
         d.CSA.numDti = 0;
     }
-    if (intenScalePhilips != 0.0) {
-        printMessage("Philips Precise RS:RI:SS = %g:%g:%g (see PMC3998685)\n",d.intenScale,d.intenIntercept,intenScalePhilips);
-        //we will report calibrated "FP" values http://www.ncbi.nlm.nih.gov/pmc/articles/PMC3998685/
-        float l0 = PhilipsPreciseVal (0, d.intenScale, d.intenIntercept, intenScalePhilips);
-        float l1 = PhilipsPreciseVal (1, d.intenScale, d.intenIntercept, intenScalePhilips);
-        if (l0 != l1) {
-            d.intenIntercept = l0;
-            d.intenScale = l1-l0;
-        }
+    if (d.CSA.numDti >= kMaxDTI4D) {
+        printError("Unable to convert DTI [recompile with increased kMaxDTI4D] detected=%d, max = %d\n", d.CSA.numDti, kMaxDTI4D);
+        d.CSA.numDti = 0;
     }
+    //d.isValid = false; //debug only - will not create output!
     return d;
 } // readDICOM()
 

@@ -43,6 +43,20 @@
 #include "nii_dicom.h"
 #include <math.h>
 
+#if !defined(_WIN64) && !defined(_WIN32)
+#include <time.h>
+#include <sys/time.h>
+double get_wall_time(){
+    struct timeval time;
+    if (gettimeofday(&time,NULL)){
+        //  Handle error
+        return 0;
+    }
+    return (double)time.tv_sec + (double)time.tv_usec * .000001;
+}
+#endif
+
+
 const char* removePath(const char* path) { // "/usr/path/filename.exe" -> "filename.exe"
     const char* pDelimeter = strrchr (path, '\\');
     if (pDelimeter)
@@ -57,6 +71,7 @@ void showHelp(const char * argv[], struct TDCMopts opts) {
     const char *cstr = removePath(argv[0]);
     printf("usage: %s [options] <in_folder>\n", cstr);
     printf(" Options :\n");
+    printf("  -1..-9 : gz compression level (1=fastest, 9=smallest)\n");
     printf("  -b : BIDS sidecar (y/n, default n)\n");
     #ifdef mySegmentByAcq
     printf("  -f : filename (%%a=antenna  (coil) number, %%c=comments, %%d=description, %%e echo number, %%f=folder name, %%i ID of patient, %%m=manufacturer, %%n=name of patient, %%p=protocol, %%q=sequence number, %%s=series number, %%t=time, %%u=acquisition number, %%z sequence name; default '%s')\n",opts.filename);
@@ -64,11 +79,14 @@ void showHelp(const char * argv[], struct TDCMopts opts) {
     printf("  -f : filename (%%a=antenna  (coil) number, %%c=comments, %%d=description, %%e echo number, %%f=folder name, %%i ID of patient, %%m=manufacturer, %%n=name of patient, %%p=protocol, %%s=series number, %%t=time, %%u=acquisition number, %%z sequence name; default '%s')\n",opts.filename);
     #endif
     printf("  -h : show help\n");
+    printf("  -i : ignore derived and 2D images (y/n, default n)\n");
+    printf("  -t : text notes includes private patient details (y/n, default n)\n");
     printf("  -m : merge 2D slices from same series regardless of study time, echo, coil, orientation, etc. (y/n, default n)\n");
     printf("  -o : output directory (omit to save to input folder)\n");
+    printf("  -p : Philips precise float (not display) scaling (y/n, default y)\n");
     printf("  -s : single file mode, do not convert other images in folder (y/n, default n)\n");
     printf("  -t : text notes includes private patient details (y/n, default n)\n");
-    printf("  -v : verbose (y/n, default n)\n");
+    printf("  -v : verbose (n/y or 0/1/2 [no, yes, logorrheic], default 0)\n");
     printf("  -x : crop (y/n, default n)\n");
     char gzCh = 'n';
     if (opts.isGz) gzCh = 'y';
@@ -125,25 +143,42 @@ int main(int argc, const char * argv[])
         showHelp(argv, opts);
         return 0;
     }
-    bool isCustomOutDir = false;
+    //bool isCustomOutDir = false;
     int i = 1;
     int lastCommandArg = 0;
     while (i < (argc)) { //-1 as final parameter is DICOM directory
         if ((strlen(argv[i]) > 1) && (argv[i][0] == '-')) { //command
             if (argv[i][1] == 'h')
                 showHelp(argv, opts);
-            else if ((argv[i][1] == 'b') && ((i+1) < argc)) {
+            else if ((argv[i][1] >= '1') && (argv[i][1] <= '9')) {
+            	opts.gzLevel = abs((int)strtol(argv[i], NULL, 10));
+            	if (opts.gzLevel > 11)
+        	 		opts.gzLevel = 11;
+            } else if ((argv[i][1] == 'b') && ((i+1) < argc)) {
                 i++;
                 if ((argv[i][0] == 'n') || (argv[i][0] == 'N')  || (argv[i][0] == '0'))
                     opts.isCreateBIDS = false;
                 else
                     opts.isCreateBIDS = true;
+            } else if ((argv[i][1] == 'i') && ((i+1) < argc)) {
+                i++;
+                if ((argv[i][0] == 'n') || (argv[i][0] == 'N')  || (argv[i][0] == '0'))
+                    opts.isIgnoreDerivedAnd2D = false;
+                else
+                    opts.isIgnoreDerivedAnd2D = true;
             } else if ((argv[i][1] == 'm') && ((i+1) < argc)) {
                 i++;
                 if ((argv[i][0] == 'n') || (argv[i][0] == 'N')  || (argv[i][0] == '0'))
                     opts.isForceStackSameSeries = false;
                 else
                     opts.isForceStackSameSeries = true;
+            } else if ((argv[i][1] == 'p') && ((i+1) < argc)) {
+                i++;
+                if ((argv[i][0] == 'n') || (argv[i][0] == 'N')  || (argv[i][0] == '0'))
+                    opts.isPhilipsFloatNotDisplayScaling = false;
+                else
+                    opts.isPhilipsFloatNotDisplayScaling = true;
+
             } else if ((argv[i][1] == 's') && ((i+1) < argc)) {
                 i++;
                 if ((argv[i][0] == 'n') || (argv[i][0] == 'N')  || (argv[i][0] == '0'))
@@ -184,7 +219,7 @@ int main(int argc, const char * argv[])
                 strcpy(opts.filename,argv[i]);
             } else if ((argv[i][1] == 'o') && ((i+1) < argc)) {
                 i++;
-                isCustomOutDir = true;
+                //isCustomOutDir = true;
                 strcpy(opts.outdir,argv[i]);
             }
             lastCommandArg = i;
@@ -201,14 +236,21 @@ int main(int argc, const char * argv[])
         return EXIT_SUCCESS;
     }
 #endif
+	#if !defined(_WIN64) && !defined(_WIN32)
+	double startWall = get_wall_time();
+	#endif
     clock_t start = clock();
     for (i = (lastCommandArg+1); i < argc; i++) {
     	strcpy(opts.indir,argv[i]); // [argc-1]
-    	if (!isCustomOutDir) strcpy(opts.outdir,opts.indir);
+    	//if (!isCustomOutDir) strcpy(opts.outdir,opts.indir);
     	if (nii_loadDir(&opts) != EXIT_SUCCESS)
     		return EXIT_FAILURE;
     }
-    printf ("Conversion required %f seconds.\n",((float)(clock()-start))/CLOCKS_PER_SEC);
+    #if !defined(_WIN64) && !defined(_WIN32)
+		printf ("Conversion required %f seconds (%f for core code).\n",get_wall_time() - startWall, ((float)(clock()-start))/CLOCKS_PER_SEC);
+	#else
+	printf ("Conversion required %f seconds.\n",((float)(clock()-start))/CLOCKS_PER_SEC);
+    #endif
     saveIniFile(opts);
     return EXIT_SUCCESS;
 }

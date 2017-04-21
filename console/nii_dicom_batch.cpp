@@ -324,6 +324,14 @@ void nii_SaveText(char pathoutname[], struct TDICOMdata d, struct TDCMopts opts,
     fclose(fp);
 }// nii_SaveText()
 
+bool isDerived(struct TDICOMdata d) {
+	#define kDerivedStr "DERIVED"
+	if ((strlen(d.imageType) < strlen(kDerivedStr)) || (strstr(d.imageType, kDerivedStr) == NULL))
+		return false;
+	else
+		return true;
+}
+
 void nii_SaveBIDS(char pathoutname[], struct TDICOMdata d, struct TDCMopts opts, struct TDTI4D *dti4D, struct nifti_1_header *h) {
 //https://docs.google.com/document/d/1HFUkAEE-pB-angVcYe6pf_-fVf4sCpOHKesUvfb8Grc/edit#
 // Generate Brain Imaging Data Structure (BIDS) info
@@ -355,8 +363,18 @@ void nii_SaveBIDS(char pathoutname[], struct TDICOMdata d, struct TDCMopts opts,
 	fprintf(fp, "\t\"ManufacturersModelName\": \"%s\",\n", d.manufacturersModelName );
 	if (strlen(d.procedureStepDescription) > 0)
 		fprintf(fp, "\t\"ProcedureStepDescription\": \"%s\",\n", d.procedureStepDescription );
+	if (strlen(d.scanningSequence) > 0)
+		fprintf(fp, "\t\"ScanningSequence\": \"%s\",\n", d.scanningSequence );
+	if (strlen(d.sequenceVariant) > 0)
+		fprintf(fp, "\t\"SequenceVariant\": \"%s\",\n", d.sequenceVariant );
+	if (strlen(d.seriesDescription) > 0)
+		fprintf(fp, "\t\"SeriesDescription\": \"%s\",\n", d.seriesDescription );
+	if (strlen(d.bodyPartExamined) > 0)
+		fprintf(fp, "\t\"BodyPartExamined\": \"%s\",\n", d.bodyPartExamined );
 	if (strlen(d.protocolName) > 0)
 		fprintf(fp, "\t\"ProtocolName\": \"%s\",\n", d.protocolName );
+	if (strlen(d.sequenceName) > 0)
+		fprintf(fp, "\t\"SequenceName\": \"%s\",\n", d.sequenceName );
 	if (strlen(d.imageType) > 0) {
 		fprintf(fp, "\t\"ImageType\": [\"");
 		bool isSep = false;
@@ -373,31 +391,47 @@ void nii_SaveBIDS(char pathoutname[], struct TDICOMdata d, struct TDCMopts opts,
 	}
 	//Chris Gorgolewski: BIDS standard specifies ISO8601 date-time format (Example: 2016-07-06T12:49:15.679688)
 	//Lines below directly save DICOM values
-  if (d.acquisitionTime > 0.0 && d.acquisitionDate > 0.0){
-     long acquisitionDate = d.acquisitionDate;
-     float acquisitionTime = d.acquisitionTime;
-     char acqDateTimeBuf[64];
-     snprintf(acqDateTimeBuf, sizeof acqDateTimeBuf, "%+08ld%+08f", acquisitionDate, acquisitionTime);
-     int ayear,amonth,aday,ahour,amin;
-     float asec;
-     int count = 0;
-     sscanf(acqDateTimeBuf, "%5d%2d%2d%3d%2d%f%n", &ayear, &amonth, &aday, &ahour, &amin, &asec, &count);
-     if (count) {
-        // ISO 8601 specifies a sign must exist for distant years.
-        fprintf(fp, "\t\"AcquisitionDateTime\": ");
-        fprintf(fp, (ayear >= 0 && ayear <= 9999) ? "\"%4d" : "\"%+4d", ayear);
-        fprintf(fp, "-%02d-%02dT%02d:%02d:%02.6f\",\n", amonth, aday, ahour, amin, asec);
-        }
-  }
-
+	if (d.acquisitionTime > 0.0 && d.acquisitionDate > 0.0){
+	 long acquisitionDate = d.acquisitionDate;
+	 double acquisitionTime = d.acquisitionTime;
+	 char acqDateTimeBuf[64];
+	 //snprintf(acqDateTimeBuf, sizeof acqDateTimeBuf, "%+08ld%+08f", acquisitionDate, acquisitionTime);
+	 snprintf(acqDateTimeBuf, sizeof acqDateTimeBuf, "%+08ld%+013.5f", acquisitionDate, acquisitionTime); //CR 20170404 add zero pad so 1:23am appears as +012300.00000 not +12300.00000
+	 printMessage("acquisitionDateTime %s\n",acqDateTimeBuf);
+	 int ayear,amonth,aday,ahour,amin;
+	 double asec;
+	 int count = 0;
+	 sscanf(acqDateTimeBuf, "%5d%2d%2d%3d%2d%lf%n", &ayear, &amonth, &aday, &ahour, &amin, &asec, &count);  //CR 20170404 %lf not %f for double precision
+	 //printf("-%02d-%02dT%02d:%02d:%02.6f\",\n", amonth, aday, ahour, amin, asec);
+	 if (count) {
+		// ISO 8601 specifies a sign must exist for distant years.
+		fprintf(fp, "\t\"AcquisitionDateTime\": ");
+		fprintf(fp, (ayear >= 0 && ayear <= 9999) ? "\"%4d" : "\"%+4d", ayear);
+		fprintf(fp, "-%02d-%02dT%02d:%02d:%02.6f\",\n", amonth, aday, ahour, amin, asec);
+		}
+	}
 	// if (d.acquisitionTime > 0.0) fprintf(fp, "\t\"AcquisitionTime\": %f,\n", d.acquisitionTime );
 	// if (d.acquisitionDate > 0.0) fprintf(fp, "\t\"AcquisitionDate\": %8.0f,\n", d.acquisitionDate );
 	//if conditionals: the following values are required for DICOM MRI, but not available for CT
+	if ((d.intenScalePhilips != 0) || (d.manufacturer == kMANUFACTURER_PHILIPS)) { //for details, see PhilipsPrecise()
+		fprintf(fp, "\t\"PhilipsRescaleSlope\": %g,\n", d.intenScale );
+		fprintf(fp, "\t\"PhilipsRescaleIntercept\": %g,\n", d.intenIntercept );
+		fprintf(fp, "\t\"PhilipsScaleSlope\": %g,\n", d.intenScalePhilips );
+		fprintf(fp, "\t\"UsePhilipsFloatNotDisplayScaling\": %d,\n", opts.isPhilipsFloatNotDisplayScaling);
+	}
+	//PET ISOTOPE MODULE ATTRIBUTES
+	if (d.radionuclidePositronFraction > 0.0) fprintf(fp, "\t\"RadionuclidePositronFraction\": %g,\n", d.radionuclidePositronFraction );
+	if (d.radionuclideTotalDose > 0.0) fprintf(fp, "\t\"RadionuclideTotalDose\": %g,\n", d.radionuclideTotalDose );
+	if (d.radionuclideHalfLife > 0.0) fprintf(fp, "\t\"RadionuclideHalfLife\": %g,\n", d.radionuclideHalfLife );
+	if (d.doseCalibrationFactor > 0.0) fprintf(fp, "\t\"DoseCalibrationFactor\": %g,\n", d.doseCalibrationFactor );
+	//MRI parameters
 	if (d.fieldStrength > 0.0) fprintf(fp, "\t\"MagneticFieldStrength\": %g,\n", d.fieldStrength );
 	if (d.flipAngle > 0.0) fprintf(fp, "\t\"FlipAngle\": %g,\n", d.flipAngle );
-	if (d.TE > 0.0) fprintf(fp, "\t\"EchoTime\": %g,\n", d.TE / 1000.0 );
+	if ((d.TE > 0.0) && (!d.isXRay)) fprintf(fp, "\t\"EchoTime\": %g,\n", d.TE / 1000.0 );
+    if ((d.TE > 0.0) && (d.isXRay)) fprintf(fp, "\t\"XRayExposure\": %g,\n", d.TE );
     if (d.TR > 0.0) fprintf(fp, "\t\"RepetitionTime\": %g,\n", d.TR / 1000.0 );
-    if ((d.CSA.bandwidthPerPixelPhaseEncode > 0.0) &&  (h->dim[2] > 0) && (h->dim[1] > 0)) {
+    if (d.TI > 0.0) fprintf(fp, "\t\"InversionTime\": %g,\n", d.TI / 1000.0 );
+	if ((d.CSA.bandwidthPerPixelPhaseEncode > 0.0) &&  (h->dim[2] > 0) && (h->dim[1] > 0)) {
 		float dwellTime = 0.0f;
 		if  (h->dim[2] == h->dim[2]) //phase encoding does not matter
 			dwellTime =  1.0/d.CSA.bandwidthPerPixelPhaseEncode/h->dim[2];
@@ -407,7 +441,6 @@ void nii_SaveBIDS(char pathoutname[], struct TDICOMdata d, struct TDCMopts opts,
 			dwellTime =  1.0/d.CSA.bandwidthPerPixelPhaseEncode/h->dim[1];
 		if (dwellTime != 0.0f) //as long as phase encoding = R or C or does not matter
 			fprintf(fp, "\t\"EffectiveEchoSpacing\": %g,\n", dwellTime );
-
     }
 	bool first = 1;
 	if (dti4D->S[0].sliceTiming >= 0.0) {
@@ -441,7 +474,7 @@ void nii_SaveBIDS(char pathoutname[], struct TDICOMdata d, struct TDCMopts opts,
 			fprintf(fp, "-");
 		fprintf(fp, "\",\n");
 	} //only save PhaseEncodingDirection if BOTH direction and POLARITY are known
-	fprintf(fp, "\t\"ConversionSoftware\": \"dcm2niix\",\n", kDCMvers );
+	fprintf(fp, "\t\"ConversionSoftware\": \"dcm2niix\",\n");
 	fprintf(fp, "\t\"ConversionSoftwareVersion\": \"%s\"\n", kDCMvers );
 	//fprintf(fp, "\t\"DicomConversion\": [\"dcm2niix\", \"%s\"]\n", kDCMvers );
     fprintf(fp, "}\n");
@@ -880,7 +913,11 @@ unsigned long mz_crc32(unsigned long crc, const unsigned char *ptr, size_t buf_l
 }
 #endif
 
-void writeNiiGz (char * baseName, struct nifti_1_header hdr,  unsigned char* src_buffer, unsigned long src_len) {
+#ifndef MZ_UBER_COMPRESSION //defined in miniz, not defined in zlib
+ #define MZ_UBER_COMPRESSION 9
+#endif
+
+void writeNiiGz (char * baseName, struct nifti_1_header hdr,  unsigned char* src_buffer, unsigned long src_len, int gzLevel) {
     //create gz file in RAM, save to disk http://www.zlib.net/zlib_how.html
     // in general this single-threaded approach is slower than PIGZ but is useful for slow (network attached) disk drives
     char fname[2048] = {""};
@@ -897,8 +934,12 @@ void writeNiiGz (char * baseName, struct nifti_1_header hdr,  unsigned char* src
     strm.opaque = Z_NULL;
     strm.next_out = pCmp; // output char array
     strm.avail_out = (unsigned int)cmp_len; // size of output
-    //if ( deflateInit2(&strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15, 8, Z_DEFAULT_STRATEGY)!= Z_OK) return;
-    if (deflateInit(&strm, Z_DEFAULT_COMPRESSION)!= Z_OK) {
+    int zLevel = Z_DEFAULT_COMPRESSION;
+    if ((gzLevel > 0) && (gzLevel < 11))
+    	zLevel = gzLevel;
+    if (zLevel > MZ_UBER_COMPRESSION)
+    	zLevel = MZ_UBER_COMPRESSION;
+    if (deflateInit(&strm, zLevel)!= Z_OK) {
         free(pCmp);
         return;
     }
@@ -987,26 +1028,20 @@ int nii_saveNII (char *niiFilename, struct nifti_1_header hdr, unsigned char *im
 void nii_saveAttributes (struct TDICOMdata &data, struct nifti_1_header &header, struct TDCMopts &opts)
 {
     ImageList *images = (ImageList *) opts.imageList;
-
-    switch (data.manufacturer)
-    {
+    switch (data.manufacturer) {
         case kMANUFACTURER_SIEMENS:
-        images->addAttribute("manufacturer", "Siemens");
-        break;
-
+        	images->addAttribute("manufacturer", "Siemens");
+        	break;
         case kMANUFACTURER_GE:
-        images->addAttribute("manufacturer", "GE");
-        break;
-
+        	images->addAttribute("manufacturer", "GE");
+        	break;
         case kMANUFACTURER_PHILIPS:
-        images->addAttribute("manufacturer", "Philips");
-        break;
-
+        	images->addAttribute("manufacturer", "Philips");
+        	break;
         case kMANUFACTURER_TOSHIBA:
-        images->addAttribute("manufacturer", "Toshiba");
-        break;
+        	images->addAttribute("manufacturer", "Toshiba");
+        	break;
     }
-
     if (strlen(data.manufacturersModelName) > 0)
         images->addAttribute("scannerModelName", data.manufacturersModelName);
     if (strlen(data.imageType) > 0)
@@ -1044,8 +1079,7 @@ int nii_saveNII(char * niiFilename, struct nifti_1_header hdr, unsigned char* im
     size_t imgsz = nii_ImgBytes(hdr);
     #ifndef myDisableZLib
     if  ((opts.isGz) &&  (strlen(opts.pigzname)  < 1) &&  ((imgsz+hdr.vox_offset) <  2147483647) ) { //use internal compressor
-    //if (true) {//TPX
-        writeNiiGz (niiFilename, hdr,  im,imgsz);
+        writeNiiGz (niiFilename, hdr,  im, imgsz, opts.gzLevel);
         return EXIT_SUCCESS;
     }
     #endif
@@ -1063,7 +1097,12 @@ int nii_saveNII(char * niiFilename, struct nifti_1_header hdr, unsigned char* im
     	char command[768];
     	strcpy(command, "\"" );
         strcat(command, opts.pigzname );
-        strcat(command, "\" -n -f \""); //current versions of pigz (2.3) built on Windows can hang if the filename is included, presumably because it is not finding the path characters ':\'
+        if ((opts.gzLevel > 0) &&  (opts.gzLevel < 12)) {
+        	char newstr[256];
+        	sprintf(newstr, "\" -n -f -%d \"", opts.gzLevel);
+        	strcat(command, newstr);
+        } else
+        	strcat(command, "\" -n -f \""); //current versions of pigz (2.3) built on Windows can hang if the filename is included, presumably because it is not finding the path characters ':\'
         strcat(command, fname);
         strcat(command, "\""); //add quotes in case spaces in filename 'pigz "c:\my dir\img.nii"'
     	#if defined(_WIN64) || defined(_WIN32) //using CreateProcess instead of system to run in background (avoids screen flicker)
@@ -1334,6 +1373,45 @@ int nii_saveNII3Deq(char * niiFilename, struct nifti_1_header hdr, unsigned char
     return EXIT_SUCCESS;
 }// nii_saveNII3Deq()
 
+float PhilipsPreciseVal (float lPV, float lRS, float lRI, float lSS) {
+    if ((lRS*lSS) == 0) //avoid divide by zero
+        return 0.0;
+    else
+        return (lPV * lRS + lRI) / (lRS * lSS);
+}
+
+void PhilipsPrecise (struct TDICOMdata * d, bool isPhilipsFloatNotDisplayScaling, struct nifti_1_header *h) {
+	if ((d->intenScalePhilips == 0) || (d->manufacturer != kMANUFACTURER_PHILIPS)) return; //not Philips
+	//we will report calibrated "FP" values http://www.ncbi.nlm.nih.gov/pmc/articles/PMC3998685/
+	float l0 = PhilipsPreciseVal (0, d->intenScale, d->intenIntercept, d->intenScalePhilips);
+	float l1 = PhilipsPreciseVal (1, d->intenScale, d->intenIntercept, d->intenScalePhilips);
+	float intenScaleP = d->intenScale;
+	float intenInterceptP = d->intenIntercept;
+	if (l0 != l1) {
+		intenInterceptP = l0;
+		intenScaleP = l1-l0;
+	}
+	if (isSameFloat(d->intenIntercept,intenInterceptP) && isSameFloat(d->intenScale, intenScaleP)) return; //same result for both methods: nothing to do or report!
+	printMessage("Philips Precise RS:RI:SS = %g:%g:%g (see PMC3998685)\n",d->intenScale,d->intenIntercept,d->intenScalePhilips);
+	printMessage(" R = raw value, P = precise value, D = displayed value\n");
+	printMessage(" RS = rescale slope, RI = rescale intercept,  SS = scale slope\n");
+	printMessage(" D = R * RS + RI    , P = D/(RS * SS)\n");
+	printMessage(" D scl_slope:scl_inter = %g:%g\n", d->intenScale,d->intenIntercept);
+	printMessage(" P scl_slope:scl_inter = %g:%g\n", intenScaleP,intenInterceptP);
+	//#define myUsePhilipsPrecise
+	if (isPhilipsFloatNotDisplayScaling) {
+		printMessage(" Using P values ('-p n ' for D values)\n");
+		//to change DICOM:
+		//d->intenScale = intenScaleP;
+		//d->intenIntercept = intenInterceptP;
+		//to change NIfTI
+    	h->scl_slope = intenScaleP;
+    	h->scl_inter = intenInterceptP;
+    	d->intenScalePhilips = 0; //so we never run this TWICE!
+	} else
+		printMessage(" Using D values ('-p y ' for P values)\n");
+} //PhilipsPrecise()
+
 void smooth1D(int num, double * im) {
 	if (num < 3) return;
 	double * src = (double *) malloc(sizeof(double)*num);
@@ -1467,6 +1545,14 @@ int saveDcm2Nii(int nConvert, struct TDCMsort dcmSort[],struct TDICOMdata dcmLis
     float *sliceMMarray = NULL; //only used if slices are not equidistant
     uint64_t indx = dcmSort[0].indx;
     uint64_t indx0 = dcmSort[0].indx;
+    if (opts.isIgnoreDerivedAnd2D && isDerived(dcmList[indx])) {
+    	printMessage("Ignoring DERIVED image(s) of series %ld %s\n", dcmList[indx].seriesNum,  nameList->str[indx]);
+    	return EXIT_SUCCESS;
+    }
+    if ((opts.isIgnoreDerivedAnd2D) && (nConvert < 2) && (dcmList[indx].xyzDim[3] < 2)) {
+    	printMessage("Ignoring 2D image of series %ld %s\n", dcmList[indx].seriesNum,  nameList->str[indx]);
+    	return EXIT_SUCCESS;
+    }
     bool saveAs3D = dcmList[indx].isHasPhase;
     struct nifti_1_header hdr0;
     unsigned char * img = nii_loadImgXL(nameList->str[indx], &hdr0,dcmList[indx], iVaries, opts.compressFlag, opts.isVerbose);
@@ -1480,6 +1566,7 @@ int saveDcm2Nii(int nConvert, struct TDCMsort dcmSort[],struct TDICOMdata dcmLis
     free(img);
     //printMessage(" %d %d %d %d %lu\n", hdr0.dim[1], hdr0.dim[2], hdr0.dim[3], hdr0.dim[4], (unsigned long)[imgM length]);
     if (nConvert > 1) {
+        //next: determine gantry tilt
         if (dcmList[indx0].gantryTilt != 0.0f)
             printMessage(" Warning: note these images have gantry tilt of %g degrees (manufacturer ID = %d)\n", dcmList[indx0].gantryTilt, dcmList[indx0].manufacturer);
         if (hdr0.dim[3] < 2) {
@@ -1555,6 +1642,19 @@ int saveDcm2Nii(int nConvert, struct TDCMsort dcmSort[],struct TDICOMdata dcmLis
             hdr0.dim[5] = nConvert;
             hdr0.dim[0] = 5;
         }
+        /*if (nConvert > 1) { //next determine if TR is true time between volumes
+        	double startTime = dcmList[indx0].acquisitionTime;
+        	double endTime = startTime;
+        	for (int i = 1; i < nConvert; i++) {
+            	double sliceTime = dcmList[dcmSort[i].indx].acquisitionTime;
+            	if (sliceTime < startTime) startTime = sliceTime;
+            	if (sliceTime > endTime) endTime = sliceTime;
+            }
+            double seriesTime = (endTime - startTime);
+            if (endTime > 0)
+            	printMessage("%g - %g = %g\n", endTime, startTime, seriesTime);
+
+        }*/
         //printMessage(" %d %d %d %d %lu\n", hdr0.dim[1], hdr0.dim[2], hdr0.dim[3], hdr0.dim[4], (unsigned long)[imgM length]);
         struct nifti_1_header hdrI;
         for (int i = 1; i < nConvert; i++) { //stack additional images
@@ -1599,6 +1699,8 @@ int saveDcm2Nii(int nConvert, struct TDCMsort dcmSort[],struct TDICOMdata dcmLis
     numFinalADC = numFinalADC; //simply to silence compiler warning when myNoSave defined
     if ((hdr0.datatype == DT_UINT16) &&  (!dcmList[dcmSort[0].indx].isSigned)) nii_check16bitUnsigned(imgM, &hdr0);
     printMessage( "Convert %d DICOM as %s (%dx%dx%dx%d)\n",  nConvert, pathoutname, hdr0.dim[1],hdr0.dim[2],hdr0.dim[3],hdr0.dim[4]);
+    PhilipsPrecise(&dcmList[dcmSort[0].indx], opts.isPhilipsFloatNotDisplayScaling, &hdr0);
+
     if (!dcmList[dcmSort[0].indx].isSlicesSpatiallySequentialPhilips)
     	nii_reorderSlices(imgM, &hdr0, dti4D);
     if (hdr0.dim[3] < 2)
@@ -1680,11 +1782,13 @@ int compareTDCMsort(void const *item1, void const *item2) {
 
 int isSameFloatGE (float a, float b) {
 //Kludge for bug in 0002,0016="DIGITAL_JACKET", 0008,0070="GE MEDICAL SYSTEMS" DICOM data: Orient field (0020:0037) can vary 0.00604261 == 0.00604273 !!!
+    //return (a == b); //niave approach does not have any tolerance for rounding errors
     return (fabs (a - b) <= 0.0001);
 }
 
 int isSameFloatDouble (double a, double b) {
     //Kludge for bug in 0002,0016="DIGITAL_JACKET", 0008,0070="GE MEDICAL SYSTEMS" DICOM data: Orient field (0020:0037) can vary 0.00604261 == 0.00604273 !!!
+    // return (a == b); //niave approach does not have any tolerance for rounding errors
     return (fabs (a - b) <= 0.0001);
 }
 
@@ -1914,115 +2018,6 @@ bool isExt (char *file_name, const char* ext) {
     return false;
 }// isExt()
 
-/*int nii_readpic(char * fname, struct nifti_1_header *nhdr) {
-    //https://github.com/jefferis/pic2nifti/blob/master/libpic2nifti.c
-#define BIORAD_HEADER_SIZE 76
-#define BIORAD_NOTE_HEADER_SIZE 16
-#define BIORAD_NOTE_SIZE 80
-    typedef struct
-    {
-        unsigned short nx, ny;    //  0   2*2     image width and height in pixels
-        short npic;               //  4   2       number of images in file
-        short ramp1_min;          //  6   2*2     LUT1 ramp min. and max.
-        short ramp1_max;
-        int32_t notes;                // 10   4       no notes=0; has notes=non zero
-        short byte_format;        // 14   2       bytes=TRUE(1); words=FALSE(0)
-        unsigned short n;         // 16   2       image number within file
-        char name[32];            // 18   32      file name
-        short merged;             // 50   2       merged format
-        unsigned short color1;    // 52   2       LUT1 color status
-        unsigned short file_id;   // 54   2       valid .PIC file=12345
-        short ramp2_min;          // 56   2*2     LUT2 ramp min. and max.
-        short ramp2_max;
-        unsigned short color2;    // 60   2       LUT2 color status
-        short edited;             // 62   2       image has been edited=TRUE(1)
-        short lens;               // 64   2       Integer part of lens magnification
-        float mag_factor;         // 66   4       4 byte real mag. factor (old ver.)
-        unsigned short dummy[3];  // 70   6       NOT USED (old ver.=real lens mag.)
-    } biorad_header;
-    typedef struct
-    {
-        short blank;		// 0	2
-        int note_flag;		// 2	4
-        int blank2;			// 6	4
-        short note_type;	// 10	2
-        int blank3;			// 12	4
-    } biorad_note_header;
-    size_t n;
-    unsigned char buffer[BIORAD_HEADER_SIZE];
-    FILE *f = fopen(fname, "rb");
-    if (f)
-        n = fread(&buffer, 1, BIORAD_HEADER_SIZE, f);
-    if(!f || n!=1) {
-        printMessage("Problem reading biorad file!\n");
-        fclose(f);
-        return EXIT_FAILURE;
-    }
-    biorad_header bhdr;
-    memcpy( &bhdr.nx, buffer+0, sizeof( bhdr.nx ) );
-    memcpy( &bhdr.ny, buffer+2, sizeof( bhdr.ny ) );
-    memcpy( &bhdr.npic, buffer+4, sizeof( bhdr.npic ) );
-    memcpy( &bhdr.byte_format, buffer+14, sizeof( bhdr.byte_format ) );
-    memcpy( &bhdr.file_id, buffer+54, sizeof( bhdr.file_id ) );
-    if (bhdr.file_id != 12345) {
-        fclose(f);
-        return EXIT_FAILURE;
-    }
-    nhdr->dim[0]=3;//3D
-    nhdr->dim[1]=bhdr.nx;
-    nhdr->dim[2]=bhdr.ny;
-    nhdr->dim[3]=bhdr.npic;
-    nhdr->dim[4]=0;
-    nhdr->pixdim[1]=1.0;
-    nhdr->pixdim[2]=1.0;
-    nhdr->pixdim[3]=1.0;
-    if (bhdr.byte_format == 1)
-        nhdr->datatype = DT_UINT8; // 2
-    else
-        nhdr->datatype = DT_UINT16;
-    nhdr->vox_offset = BIORAD_HEADER_SIZE;
-    if(fseek(f, bhdr.nx*bhdr.ny*bhdr.npic*bhdr.byte_format, SEEK_CUR)==0) {
-        biorad_note_header nh;
-        char noteheaderbuf[BIORAD_NOTE_HEADER_SIZE];
-        char note[BIORAD_NOTE_SIZE];
-        while (!feof(f)) {
-            size_t sz = fread(&noteheaderbuf, 1, BIORAD_NOTE_HEADER_SIZE, f);
-            if (sz < BIORAD_NOTE_HEADER_SIZE) return EXIT_FAILURE;
-            sz = fread(&note, 1, BIORAD_NOTE_SIZE, f);
-            if (sz < BIORAD_NOTE_SIZE) return EXIT_FAILURE;
-            memcpy(&nh.note_flag, noteheaderbuf+2, sizeof(nh.note_flag));
-            memcpy(&nh.note_type, noteheaderbuf+10, sizeof(nh.note_type));
-            //		printMessage("regular note line %s\n",note);
-            //		printMessage("note flag = %d, note type = %d\n",nh.note_flag,nh.note_type);
-            // These are not interesting notes
-            if(nh.note_type==1) continue;
-            // Look for calibration information
-            double d1, d2, d3;
-            if ( 3 == sscanf( note, "AXIS_2 %lf %lf %lf", &d1, &d2, &d3 ) )
-                nhdr->pixdim[1] = d3;
-            if ( 3 == sscanf( note, "AXIS_3 %lf %lf %lf", &d1, &d2, &d3 ) )
-                nhdr->pixdim[2] = d3;
-            if ( 3 == sscanf( note, "AXIS_4 %lf %lf %lf", &d1, &d2, &d3 ) )
-                nhdr->pixdim[3] = d3;
-            if(nh.note_flag==0) break;
-        }
-    }
-    nhdr->sform_code = 1;
-    nhdr->srow_x[0]=nhdr->pixdim[1];nhdr->srow_x[1]=0.0f;nhdr->srow_x[2]=0.0f;nhdr->srow_x[3]=0.0f;
-    nhdr->srow_y[0]=0.0f;nhdr->srow_y[1]=nhdr->pixdim[2];nhdr->srow_y[2]=0.0f;nhdr->srow_y[3]=0.0f;
-    nhdr->srow_z[0]=0.0f;nhdr->srow_z[1]=0.0f;nhdr->srow_z[2]=nhdr->pixdim[3];nhdr->srow_z[3]=0.0f;
-    fclose(f);
-    convertForeignToNifti(nhdr);
-    return EXIT_SUCCESS;
-}
-
-int convert_foreign(struct TDCMopts opts) {
-    nifti_1_header nhdr ;
-    int OK = EXIT_FAILURE;
-    OK = nii_readpic(opts.indir, &nhdr);
-    return OK;
-}*/
-
 int convert_parRec(struct TDCMopts opts) {
     //sample dataset from Ed Gronenschild <ed.gronenschild@maastrichtuniversity.nl>
     struct TSearchList nameList;
@@ -2067,12 +2062,13 @@ int nii_loadDir(struct TDCMopts* opts) {
     char indir[512];
     strcpy(indir,opts->indir);
     bool isFile = is_fileNotDir(opts->indir);
+    //bool isParRec = (isFile && ( (isExt(indir, ".par")) || (isExt(indir, ".rec"))) );
     if (isFile) //if user passes ~/dicom/mr1.dcm we will look at all files in ~/dicom
         dropFilenameFromPath(opts->indir);//getParentFolder(opts.indir, opts.indir);
     dropTrailingFileSep(opts->indir);
-    if (strlen(opts->outdir) < 1)
+    if (strlen(opts->outdir) < 1) {
         strcpy(opts->outdir,opts->indir);
-    else
+    } else
     	dropTrailingFileSep(opts->outdir);
     if (!is_dir(opts->outdir,true)) {
 		#ifdef myUseInDirIfOutDirUnavailable
@@ -2095,7 +2091,7 @@ int nii_loadDir(struct TDCMopts* opts) {
         return convert_foreign(*opts);
     }*/
     getFileName(opts->indirParent, opts->indir);
-    if (isFile && ((isExt(indir, ".par")) || (isExt(indir, ".rec"))) ) {
+    if (isFile && ( (isExt(indir, ".par")) || (isExt(indir, ".rec"))) ) {
         char pname[512], rname[512];
         strcpy(pname,indir);
         strcpy(rname,indir);
@@ -2113,7 +2109,7 @@ int nii_loadDir(struct TDCMopts* opts) {
     if ((isFile) && (opts->isOnlySingleFile))
         return singleDICOM(opts, indir);
     struct TSearchList nameList;
-	nameList.maxItems = 32000; // larger requires more memory, smaller more passes
+	nameList.maxItems = 24000; // larger requires more memory, smaller more passes
     //1: find filenames of dicom files: up to two passes if we found more files than we allocated memory
     for (int i = 0; i < 2; i++ ) {
         nameList.str = (char **) malloc((nameList.maxItems+1) * sizeof(char *)); //reserve one pointer (32 or 64 bits) per potential file
@@ -2139,7 +2135,7 @@ int nii_loadDir(struct TDCMopts* opts) {
     bool compressionWarning = false;
     for (int i = 0; i < nDcm; i++ ) {
         dcmList[i] = readDICOMv(nameList.str[i], opts->isVerbose, opts->compressFlag, &dti4D); //ignore compile warning - memory only freed on first of 2 passes
-        if ((dcmList[i].patientPositionNumPhilips > 1) || (dcmList[i].CSA.numDti > 1)) { //4D dataset: dti4D arrays require huge amounts of RAM - write this immediately
+        if ((dcmList[i].isValid) &&((dcmList[i].patientPositionNumPhilips > 1) || (dcmList[i].CSA.numDti > 1))) { //4D dataset: dti4D arrays require huge amounts of RAM - write this immediately
             struct TDCMsort dcmSort[1];
             dcmSort[0].indx = i;
             dcmSort[0].img = ((uint64_t)dcmList[i].seriesNum << 32) + dcmList[i].imageNum;
@@ -2329,8 +2325,11 @@ void setDefaultOpts (struct TDCMopts *opts, const char * argv[]) { //either "set
     strcpy(opts->outdir,"");
     opts->isOnlySingleFile = false; //convert all files in a directory, not just a single file
     opts->isForceStackSameSeries = false;
+    opts->isIgnoreDerivedAnd2D = false;
+    opts->isPhilipsFloatNotDisplayScaling = true;
     opts->isCrop = false;
     opts->isGz = false;
+    opts->gzLevel = -1;
     opts->isFlipY = true; //false: images in raw DICOM orientation, true: image rows flipped to cartesian coordinates
     opts->isRGBplanar = false;
     opts->isCreateBIDS =  false;
