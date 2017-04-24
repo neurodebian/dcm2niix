@@ -6,9 +6,12 @@ Section: science
 Priority: optional
 Build-Depends: debhelper (>= 9~),
                cmake,
+               pkg-config,
+               libboost-dev,
+               libturbojpeg0-dev,
+               libyaml-cpp-dev,
                zlib1g-dev,
-               libyaml-cpp-dev, libboost-dev,
-Standards-Version: 3.9.6
+Standards-Version: 3.9.8
 Vcs-Browser: https://anonscm.debian.org/cgit/pkg-exppsy/dcm2niix.git
 Vcs-Git: git://anonscm.debian.org/pkg-exppsy/dcm2niix.git
 Homepage: https://github.com/rordenlab/dcm2niix
