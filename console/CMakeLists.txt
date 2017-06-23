@@ -44,6 +44,7 @@ add_executable(dcm2niix
     jpg_0XC3.cpp
     ujpeg.cpp
     nifti1_io_core.cpp
+    nii_foreign.cpp
     nii_ortho.cpp
     nii_dicom_batch.cpp)
 
@@ -58,7 +59,7 @@ endif()
 option(USE_SYSTEM_TURBOJPEG "Use the system TurboJPEG" OFF)
 if(USE_SYSTEM_TURBOJPEG)
     find_package(PkgConfig REQUIRED)
-    pkg_check_modules(TurboJPEG libturbojpeg)
+    pkg_check_modules(TurboJPEG REQUIRED libturbojpeg)
     add_definitions(-DmyTurboJPEG)
     target_include_directories(dcm2niix PRIVATE ${TurboJPEG_INCLUDE_DIRS})
     target_link_libraries(dcm2niix ${TurboJPEG_LIBRARIES})
@@ -79,6 +80,15 @@ if(USE_OPENJPEG)
     option(OpenJPEG_DIR "Path to OpenJPEG configuration file" "")
 
     find_package(OpenJPEG)
+
+    if(WIN32)
+        if(BUILD_SHARED_LIBS)
+            add_definitions(-DOPJ_EXPORTS)
+        else()
+            add_definitions(-DOPJ_STATIC)
+        endif()
+    endif()
+
     target_include_directories(dcm2niix PRIVATE ${OPENJPEG_INCLUDE_DIRS})
     target_link_libraries(dcm2niix ${OPENJPEG_LIBRARIES})
 else ()
@@ -95,6 +105,7 @@ if(BATCH_VERSION)
         jpg_0XC3.cpp
         ujpeg.cpp
         nifti1_io_core.cpp
+        nii_foreign.cpp
         nii_ortho.cpp
         nii_dicom_batch.cpp)
 
@@ -107,6 +118,11 @@ if(BATCH_VERSION)
     if(ZLIB_FOUND)
         add_definitions(-DmyDisableMiniZ)
         target_link_libraries(dcm2niibatch z)
+    endif()
+
+    if(TurboJPEG_FOUND)
+        target_include_directories(dcm2niibatch PRIVATE ${TurboJPEG_INCLUDE_DIRS})
+        target_link_libraries(dcm2niibatch ${TurboJPEG_LIBRARIES})
     endif()
 
     if(JASPER_FOUND)
@@ -125,4 +141,4 @@ if(BATCH_VERSION)
     list(APPEND PROGRAMS dcm2niibatch)
 endif()
 
-install(TARGETS ${PROGRAMS} DESTINATION ${CMAKE_INSTALL_PREFIX})
+install(TARGETS ${PROGRAMS} DESTINATION bin)

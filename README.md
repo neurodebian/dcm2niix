@@ -1,5 +1,5 @@
 [![Build Status](https://travis-ci.org/rordenlab/dcm2niix.svg?branch=master)](https://travis-ci.org/rordenlab/dcm2niix)
-[![Build status](https://ci.appveyor.com/api/projects/status/xdkqua54f90x4049/branch/master?svg=true)](https://ci.appveyor.com/project/chrisfilo/dcm2niix)
+[![Build status](https://ci.appveyor.com/api/projects/status/7o0xp2fgbhadkgn1?svg=true)](https://ci.appveyor.com/project/neurolabusc/dcm2niix)
 
 ## About
 
@@ -11,13 +11,24 @@ This software is open source. The bulk of the code is covered by the BSD license
 
 ## Versions
 
-3-April-2017
+21-June-2017
+ - Read DICOM header in 1Mb segments rather than loading whole file : reduces ram usage and [faster for systems with slow io](https://github.com/rordenlab/dcm2niix/issues/104).
+ - Report [TotalReadoutTime](https://github.com/rordenlab/dcm2niix/issues/98).
+ - Fix JPEG2000 support in [Superbuild](https://github.com/rordenlab/dcm2niix/issues/105).
+
+28-May-2017
+ - Remove all derived images from [Philips DTI series](http://www.nitrc.org/forum/message.php?msg_id=21025).
+ - Provide some [Siemens EPI sequence details](https://github.com/rordenlab/dcm2niix/issues).
+
+28-April-2017
+ - Experimental [ECAT support](https://github.com/rordenlab/dcm2niix/issues/95).
  - Updated cmake to make JPEG2000 support easier with improved Travis and AppVeyor support [Ningfei Li](https://github.com/ningfei).
  - Supports Data/Time for images that report Data/Time (0008,002A) but not separate Date and Time (0008,0022 and 0008,0032).
  - [BIDS reports morning times correctly](http://www.nitrc.org/forum/message.php?msg_id=20852).
  - Options -1..-9 to control [gz compression level](https://github.com/rordenlab/dcm2niix/issues/90).
  - Includes some [PET details in the BIDS JSON sidecar](https://github.com/rordenlab/dcm2niix/issues/87).
  - Better detection of image order for Philips 4D DICOM (reported by Jason McMorrow and Stephen Wilson).
+ - [Include StudyInstanceUID and SeriesInstanceUID in filename](https://github.com/rordenlab/dcm2niix/issues/94).
 
 7-Feb-2017
  - Can be compiled to use either Philips [Float or Display](http://www.nitrc.org/forum/message.php?msg_id=20213) intensity intercept and slope values.
@@ -128,8 +139,15 @@ You can add as many files as you want to convert as long as this structure stays
 
 ## Build
 
-### Build command line version with cmake (Linux, Windows, MacOS)
+### Build command line version with cmake (Linux, MacOS, Windows)
 
+`cmake` and `pkg-config` (optional) can be installed as follows:
+
+Ubuntu: `sudo apt-get install cmake pkg-config`
+
+MacOS: `brew install cmake pkg-config`
+
+**To build:**
 ```bash
 mkdir build && cd build
 cmake ..
@@ -137,25 +155,15 @@ make
 ```
 `dcm2niix` will be created in the `bin` subfolder. To install on the system run `make install`.
 
+**optional building with OpenJPEG:**
+
+Support for JPEG2000 using OpenJPEG is optional. To build with OpenJPEG change the cmake command to `cmake -DUSE_OPENJPEG=ON ..`
+
 **optional batch processing version:**
 
 The batch processing binary `dcm2niibatch` is optional. To build `dcm2niibatch` as well change the cmake command to `cmake -DBATCH_VERSION=ON ..`
 
-This requires the following libraries:
-- pkg-config
-- yaml-cpp
-- a compiler that supports c++11
-
-e.g. the dependencies can be installed as follows:
-
-Ubuntu 14.04
-```
-sudo apt-get install pkg-config libyaml-cpp-dev libyaml-cpp0.5 cmake libboost-dev
-```
-MacOS
-```
-brew install pkg-config yaml-cpp cmake
-```
+This requires a compiler that supports c++11.
 
 
 ### Building the command line version without cmake

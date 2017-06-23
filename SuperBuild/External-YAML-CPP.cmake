@@ -1,4 +1,4 @@
-set(YAML-CPP_TAG 5c3cb09) # version yaml-cpp-0.5.3
+set(YAML-CPP_TAG yaml-cpp-0.5.3) # version yaml-cpp-0.5.3
 
 ExternalProject_Add(yaml-cpp
     GIT_REPOSITORY "${git_protocol}://github.com/ningfei/yaml-cpp.git"
@@ -9,7 +9,7 @@ ExternalProject_Add(yaml-cpp
         -Wno-dev
         --no-warn-unused-cli
         -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
-        -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}
+        -DCMAKE_INSTALL_PREFIX=${DEP_INSTALL_DIR}
 )
 
-set(YAML-CPP_DIR ${CMAKE_BINARY_DIR}/lib/cmake/yaml-cpp)
+set(YAML-CPP_DIR ${DEP_INSTALL_DIR}/lib/cmake/yaml-cpp)

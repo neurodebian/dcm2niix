@@ -72,14 +72,19 @@ void showHelp(const char * argv[], struct TDCMopts opts) {
     printf("usage: %s [options] <in_folder>\n", cstr);
     printf(" Options :\n");
     printf("  -1..-9 : gz compression level (1=fastest, 9=smallest)\n");
-    printf("  -b : BIDS sidecar (y/n, default n)\n");
+    char bidsCh = 'n';
+    if (opts.isCreateBIDS) bidsCh = 'y';
+    printf("  -b : BIDS sidecar (y/n, default %c)\n", bidsCh);
+    if (opts.isAnonymizeBIDS) bidsCh = 'y'; else bidsCh = 'n';
+    printf("   -ba : anonymize BIDS (y/n, default %c)\n", bidsCh);
     #ifdef mySegmentByAcq
-    printf("  -f : filename (%%a=antenna  (coil) number, %%c=comments, %%d=description, %%e echo number, %%f=folder name, %%i ID of patient, %%m=manufacturer, %%n=name of patient, %%p=protocol, %%q=sequence number, %%s=series number, %%t=time, %%u=acquisition number, %%z sequence name; default '%s')\n",opts.filename);
+     #define kQstr " %%q=sequence number,"
     #else
-    printf("  -f : filename (%%a=antenna  (coil) number, %%c=comments, %%d=description, %%e echo number, %%f=folder name, %%i ID of patient, %%m=manufacturer, %%n=name of patient, %%p=protocol, %%s=series number, %%t=time, %%u=acquisition number, %%z sequence name; default '%s')\n",opts.filename);
+     #define kQstr ""
     #endif
+    printf("  -f : filename (%%a=antenna  (coil) number, %%c=comments, %%d=description, %%e echo number, %%f=folder name, %%i ID of patient, %%j seriesInstanceUID, %%k studyInstanceUID, %%m=manufacturer, %%n=name of patient, %%p=protocol,%s %%s=series number, %%t=time, %%u=acquisition number, %%x study ID; %%z sequence name; default '%s')\n", kQstr, opts.filename);
     printf("  -h : show help\n");
-    printf("  -i : ignore derived and 2D images (y/n, default n)\n");
+    printf("  -i : ignore derived, localizer and 2D images (y/n, default n)\n");
     printf("  -t : text notes includes private patient details (y/n, default n)\n");
     printf("  -m : merge 2D slices from same series regardless of study time, echo, coil, orientation, etc. (y/n, default n)\n");
     printf("  -o : output directory (omit to save to input folder)\n");
@@ -115,6 +120,7 @@ void showHelp(const char * argv[], struct TDCMopts opts) {
     printf(" Examples :\n");
     printf("  %s /Users/chris/dir\n", cstr);
     printf("  %s -o /users/cr/outdir/ -z y ~/dicomdir\n", cstr);
+    printf("  %s -f %%p_%%s -b y -ba n ~/dicomdir\n", cstr);
     printf("  %s -f mystudy%%s ~/dicomdir\n", cstr);
     printf("  %s -o \"~/dir with spaces/dir\" ~/dicomdir\n", cstr);
 #endif
@@ -155,11 +161,21 @@ int main(int argc, const char * argv[])
             	if (opts.gzLevel > 11)
         	 		opts.gzLevel = 11;
             } else if ((argv[i][1] == 'b') && ((i+1) < argc)) {
-                i++;
-                if ((argv[i][0] == 'n') || (argv[i][0] == 'N')  || (argv[i][0] == '0'))
-                    opts.isCreateBIDS = false;
-                else
-                    opts.isCreateBIDS = true;
+                if (strlen(argv[i]) < 3) { //"-b y"
+                	i++;
+                	if ((argv[i][0] == 'n') || (argv[i][0] == 'N')  || (argv[i][0] == '0'))
+                    	opts.isCreateBIDS = false;
+                	else
+                    	opts.isCreateBIDS = true;
+                } else if (argv[i][2] == 'a') {//"-ba y"
+                	i++;
+                	if ((argv[i][0] == 'n') || (argv[i][0] == 'N')  || (argv[i][0] == '0'))
+                    	opts.isAnonymizeBIDS = false;
+                	else
+                    	opts.isAnonymizeBIDS = true;
+
+                } else
+                	printf("Error: Unknown command line argument: '%s'\n", argv[i]);
             } else if ((argv[i][1] == 'i') && ((i+1) < argc)) {
                 i++;
                 if ((argv[i][0] == 'n') || (argv[i][0] == 'N')  || (argv[i][0] == '0'))

@@ -15,6 +15,7 @@ endif()
 # Basic CMake build settings
 set(CMAKE_BUILD_TYPE "Release" CACHE STRING
     "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel." FORCE)
+set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS  "Debug;Release;RelWithDebInfo;MinSizeRel")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 option(USE_STATIC_RUNTIME "Use static runtime" ON)
@@ -30,6 +31,14 @@ include(ExternalProject)
 
 set(DEPENDENCIES)
 
+option(INSTALL_DEPENDENCIES "Optionally install built dependent libraries (OpenJPEG and yaml-cpp) for future use." OFF)
+
+if(INSTALL_DEPENDENCIES)
+    set(DEP_INSTALL_DIR ${CMAKE_INSTALL_PREFIX})
+else()
+    set(DEP_INSTALL_DIR ${CMAKE_BINARY_DIR})
+endif()
+
 if(USE_OPENJPEG)
     message("-- Build with OpenJPEG: ${USE_OPENJPEG}")
 
@@ -44,6 +53,7 @@ if(USE_OPENJPEG)
     else()
         include(${CMAKE_SOURCE_DIR}/SuperBuild/External-OPENJPEG.cmake)
         list(APPEND DEPENDENCIES openjpeg)
+        set(BUILD_OPENJPEG TRUE)
         message("--     Will build OpenJPEG from github")
     endif()
 endif()
@@ -62,6 +72,7 @@ if(BATCH_VERSION)
     else()
         include(${CMAKE_SOURCE_DIR}/SuperBuild/External-YAML-CPP.cmake)
         list(APPEND DEPENDENCIES yaml-cpp)
+        set(BUILD_YAML-CPP TRUE)
         message("--     Will build yaml-cpp from github")
     endif()
 endif()
@@ -75,6 +86,7 @@ ExternalProject_Add(console
         -Wno-dev
         --no-warn-unused-cli
         -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
+        -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}
         -DUSE_STATIC_RUNTIME:BOOL=${USE_STATIC_RUNTIME}
         -DUSE_SYSTEM_ZLIB:BOOL=${USE_SYSTEM_ZLIB}
         -DUSE_SYSTEM_TURBOJPEG:BOOL=${USE_SYSTEM_TURBOJPEG}
@@ -85,8 +97,10 @@ ExternalProject_Add(console
         # yaml-cpp
         -DBATCH_VERSION:BOOL=${BATCH_VERSION}
         -DYAML-CPP_DIR:PATH=${YAML-CPP_DIR}
-        -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/bin
 )
+
+install(DIRECTORY ${CMAKE_BINARY_DIR}/bin/ DESTINATION bin
+        USE_SOURCE_PERMISSIONS)
 
 option(BUILD_DOCS "Build documentation (manpages)" OFF)
 if(BUILD_DOCS)
