@@ -1,3 +1,11 @@
+dcm2niix (1:1.0.20170621-1) neurodebian; urgency=medium
+
+  * New upstream release
+    - better sanitarization of Dates in the json side-cars
+    - estimation of "TotalReadoutTime" etc
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Fri, 23 Jun 2017 09:57:01 -0400
+
 dcm2niix (1:1.0.20170403-1) neurodebian; urgency=medium
 
   * New upstream release.
