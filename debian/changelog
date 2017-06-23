@@ -1,3 +1,9 @@
+dcm2niix (1:1.0.20170623-2) neurodebian; urgency=medium
+
+  * Build with -DUSE_OPENJPEG=ON
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Fri, 23 Jun 2017 12:00:45 -0700
+
 dcm2niix (1:1.0.20170623-1) neurodebian; urgency=medium
 
   * Fixes up issue with SliceTiming not being reported
