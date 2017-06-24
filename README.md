@@ -13,6 +13,8 @@ This software is open source. The bulk of the code is covered by the BSD license
 
 23-June-2017
  - [Ensure slice timing always encoded for Siemens EPI](https://github.com/neurolabusc/dcm_qa/issues/4#issuecomment-310707906)
+ - [Integrates validation](https://github.com/neurolabusc/dcm_qa)
+ - JSON fix (InstitutionName -> InstitutionAddress)
 
 21-June-2017
  - Read DICOM header in 1Mb segments rather than loading whole file : reduces ram usage and [faster for systems with slow io](https://github.com/rordenlab/dcm2niix/issues/104).
@@ -160,7 +162,13 @@ make
 
 **optional building with OpenJPEG:**
 
-Support for JPEG2000 using OpenJPEG is optional. To build with OpenJPEG change the cmake command to `cmake -DUSE_OPENJPEG=ON ..`
+Support for JPEG2000 using OpenJPEG is optional. To build with OpenJPEG change the cmake command to `cmake -DUSE_OPENJPEG=ON ..`:
+
+```bash
+mkdir build && cd build
+cmake -DUSE_OPENJPEG=ON ..
+make
+```
 
 **optional batch processing version:**
 
