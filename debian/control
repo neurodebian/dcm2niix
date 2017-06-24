@@ -9,6 +9,7 @@ Build-Depends: debhelper (>= 9~),
                pkg-config,
                libboost-dev,
                libturbojpeg0-dev,
+               libopenjp2-7-dev,
                libyaml-cpp-dev,
                zlib1g-dev,
 Standards-Version: 3.9.8
