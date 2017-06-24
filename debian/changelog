@@ -1,10 +1,8 @@
 dcm2niix (1:1.0.20170624-1) neurodebian; urgency=medium
 
   * Minor bugfix release
-  * Build with -DUSE_OPENJPEG=ON so that it passes qa tests
-    - added libopenjp2-7-dev to Build-Depends
 
- -- Yaroslav Halchenko <debian@onerussian.com>  Sat, 24 Jun 2017 06:57:11 -0700
+ -- Yaroslav Halchenko <debian@onerussian.com>  Sat, 24 Jun 2017 16:32:13 -0700
 
 dcm2niix (1:1.0.20170623-1) neurodebian; urgency=medium
 
