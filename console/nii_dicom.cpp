@@ -169,14 +169,25 @@ static OPJ_SIZE_T opj_skip_from_buffer(OPJ_SIZE_T p_nb_bytes, BufInfo * p_file) 
     return (OPJ_SIZE_T)-1;
 } //opj_skip_from_buffer()
 
+//fix for https://github.com/neurolabusc/dcm_qa/issues/5
 static OPJ_BOOL opj_seek_from_buffer(OPJ_SIZE_T p_nb_bytes, BufInfo * p_file) {
-    if(p_file->cur + p_nb_bytes < p_file->buf + p_file->len ) {
-        p_file->cur += p_nb_bytes;
+    //printf("opj_seek_from_buffer %d + %d -> %d + %d\n", p_file->cur , p_nb_bytes, p_file->buf, p_file->len);
+    if ((p_file->buf + p_nb_bytes < p_file->buf + p_file->len ) && (p_nb_bytes >= 0)){
+        p_file->cur = p_file->buf + p_nb_bytes;
         return OPJ_TRUE;
     }
     p_file->cur = p_file->buf + p_file->len;
     return OPJ_FALSE;
 } //opj_seek_from_buffer()
+
+/*static OPJ_BOOL opj_seek_from_buffer(OPJ_SIZE_T p_nb_bytes, BufInfo * p_file) {
+    if((p_file->cur + p_nb_bytes) < (p_file->buf + p_file->len) ) {
+        p_file->cur += p_nb_bytes;
+        return OPJ_TRUE;
+    }
+    p_file->cur = p_file->buf + p_file->len;
+    return OPJ_FALSE;
+} //opj_seek_from_buffer()*/
 
 opj_stream_t* opj_stream_create_buffer_stream(BufInfo* p_file, OPJ_UINT32 p_size, OPJ_BOOL p_is_read_stream) {
     opj_stream_t* l_stream;
@@ -511,7 +522,6 @@ mat44 set_nii_header_x(struct TDICOMdata d, struct TDICOMdata d2, struct nifti_1
         double nRowCol = ceil(sqrt((double) d.CSA.mosaicSlices));
         double lFactorX = (d.xyzDim[1] -(d.xyzDim[1]/nRowCol)   )/2.0;
         double lFactorY = (d.xyzDim[2] -(d.xyzDim[2]/nRowCol)   )/2.0;
-        //printf("%g %g\n", lFactorX, lFactorY);
         Q44.m[0][3] =(float)((Q44.m[0][0]*lFactorX)+(Q44.m[0][1]*lFactorY)+Q44.m[0][3]);
 		Q44.m[1][3] = (float)((Q44.m[1][0] * lFactorX) + (Q44.m[1][1] * lFactorY) + Q44.m[1][3]);
 		Q44.m[2][3] = (float)((Q44.m[2][0] * lFactorX) + (Q44.m[2][1] * lFactorY) + Q44.m[2][3]);
@@ -2249,7 +2259,7 @@ unsigned char * nii_loadImgJPEGC3(char* imgname, struct nifti_1_header hdr, stru
     // https://github.com/chafey/cornerstoneWADOImageLoader
     //I have never seen these segmented images in the wild, so we will simply warn the user if we encounter such a file
     //int Sz = JPEG_SOF_0XC3_sz (imgname, (dcm.imageStart - 4), dcm.isLittleEndian);
-    //printf("Sz %d %d\n", Sz, dcm.imageBytes );
+    //printMessage("Sz %d %d\n", Sz, dcm.imageBytes );
     //This behavior is legal but appears extremely rare
     //ftp://medical.nema.org/medical/dicom/final/cp900_ft.pdf
     if (65536 == dcm.imageBytes)
@@ -2644,7 +2654,7 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
 #define  kImageStartFloat 0x7FE0+(0x0008 << 16 )
 #define  kImageStartDouble 0x7FE0+(0x0009 << 16 )
 #define kNest 0xFFFE +(0xE000 << 16 ) //Item follows SQ
-#define  kUnnest 0xFFFE +(0xE00D << 16 ) //ItemDelimitationItem [length defined] http://www.dabsoft.ch/dicom/5/7.5/
+#define  kUnnest  0xFFFE +(0xE00D << 16 ) //ItemDelimitationItem [length defined] http://www.dabsoft.ch/dicom/5/7.5/
 #define  kUnnest2 0xFFFE +(0xE0DD << 16 )//SequenceDelimitationItem [length undefined]
     int nest = 0;
     double zSpacing = -1.0l; //includes slice thickness plus gap
@@ -2664,6 +2674,9 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
     //float intenScalePhilips = 0.0;
     char acquisitionDateTimeTxt[kDICOMStr] = "";
     bool isEncapsulatedData = false;
+    int encapsulatedDataFragments = 0;
+    int encapsulatedDataFragmentStart = 0; //position of first FFFE,E000 for compressed images
+    int encapsulatedDataImageStart = 0; //position of 7FE0,0010 for compressed images (where actual image start should be start of first fragment)
     bool isOrient = false;
     bool isIconImageSequence = false;
     bool isSwitchToImplicitVR = false;
@@ -2765,13 +2778,18 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
             //printMessage("SQstart %d\n", sqDepth);
         }
         if ((groupElement == kNest) || ((vr[0] == 'S') && (vr[1] == 'Q'))) nest++;
-        if (groupElement == kUnnest) nest--;
+        //if ((groupElement == kUnnest) || (groupElement == kUnnest2)) { // <- ?
+        if (groupElement == kUnnest) {
+        	nest--;
+        }
         //next: look for required tags
         if ((groupElement == kNest)  && (isEncapsulatedData)) {
             d.imageBytes = dcmInt(4,&buffer[lPos-4],d.isLittleEndian);
             //printMessage("compressed data %d-> %ld\n",d.imageBytes, lPos);
             if (d.imageBytes > 128) {
-                d.imageStart = (int)lPos + (int)lFileOffset;
+            	encapsulatedDataFragments++;
+   				if (encapsulatedDataFragmentStart == 0)
+                	encapsulatedDataFragmentStart = (int)lPos + (int)lFileOffset;
             }
         }
         if ((isIconImageSequence) && ((groupElement & 0x0028) == 0x0028 )) groupElement = kUnused; //ignore icon dimensions
@@ -3121,7 +3139,7 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
                 break;
             /*case kStackSliceNumber: { //https://github.com/Kevin-Mattheus-Moerman/GIBBON/blob/master/dicomDict/PMS-R32-dict.txt
             	int stackSliceNumber = dcmInt(lLength,&buffer[lPos],d.isLittleEndian);
-            	printf("%d\n",stackSliceNumber);
+            	printMessage("StackSliceNumber %d\n",stackSliceNumber);
             	break;
 			}*/
             case 	kNumberOfDynamicScans:
@@ -3324,6 +3342,8 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
                 if ((d.compressionScheme != kCompressNone) && (!isIconImageSequence)) {
                     lLength = 0;
                     isEncapsulatedData = true;
+                    encapsulatedDataImageStart = (int)lPos + (int)lFileOffset;
+                    //printWarning("Encapsulated\n");
                 }
 				isIconImageSequence = false;
                 break;
@@ -3365,6 +3385,16 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
         //printMessage("%d\n",d.imageStart);
     } //while d.imageStart == 0
     free (buffer);
+    if (encapsulatedDataFragmentStart > 0) {
+        if (encapsulatedDataFragments > 1)
+        	printError(" Compressed image stored as %d fragments: decompress with Osirix, dcmdjpeg or dcmjp2k\n", encapsulatedDataFragments);
+    	else
+    		d.imageStart = encapsulatedDataFragmentStart;
+    } else if ((isEncapsulatedData) && (d.imageStart < 128)) {
+    	printWarning(" DICOM violation (contact vendor): compressed image without image fragments, assuming image offset defined by 0x7FE0,x0010\n");
+    	d.imageStart = encapsulatedDataImageStart;
+    }
+
     //Recent Philips images include DateTime (0008,002A) but not separate date and time (0008,0022 and 0008,0032)
     #define kYYYYMMDDlen 8 //how many characters to encode year,month,day in "YYYYDDMM" format
     if ((strlen(acquisitionDateTimeTxt) > (kYYYYMMDDlen+5)) && (!isFloatDiff(d.acquisitionTime, 0.0f)) && (!isFloatDiff(d.acquisitionDate, 0.0f)) ) {
