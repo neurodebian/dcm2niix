@@ -1,3 +1,11 @@
+dcm2niix (1:1.0.20170624+git8-g87d2142-1) neurodebian; urgency=medium
+
+  * New upstream snapshot from v1.0.20170624-8-g87d2142
+  * Build with -DUSE_OPENJPEG=ON so that it passes qa tests
+    - added libopenjp2-7-dev to Build-Depends
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Mon, 24 Jul 2017 10:11:02 -0400
+
 dcm2niix (1:1.0.20170624-1) neurodebian; urgency=medium
 
   * Minor bugfix release
