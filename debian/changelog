@@ -1,3 +1,10 @@
+dcm2niix (1:1.0.20170724+git3-gab68e44-1) neurodebian; urgency=medium
+
+  * Fresh post-release snapshot
+    - all errors go now to stderr instead of stdout
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Tue, 08 Aug 2017 11:54:31 -0400
+
 dcm2niix (1:1.0.20170624+git8-g87d2142-1) neurodebian; urgency=medium
 
   * New upstream snapshot from v1.0.20170624-8-g87d2142
