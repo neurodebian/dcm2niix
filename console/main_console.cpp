@@ -71,12 +71,14 @@ void showHelp(const char * argv[], struct TDCMopts opts) {
     const char *cstr = removePath(argv[0]);
     printf("usage: %s [options] <in_folder>\n", cstr);
     printf(" Options :\n");
-    printf("  -1..-9 : gz compression level (1=fastest, 9=smallest)\n");
+    printf("  -1..-9 : gz compression level (1=fastest..9=smallest, default %d)\n", opts.gzLevel);
     char bidsCh = 'n';
     if (opts.isCreateBIDS) bidsCh = 'y';
-    printf("  -b : BIDS sidecar (y/n, default %c)\n", bidsCh);
+    printf("  -b : BIDS sidecar (y/n/o(o=only: no NIfTI), default %c)\n", bidsCh);
     if (opts.isAnonymizeBIDS) bidsCh = 'y'; else bidsCh = 'n';
     printf("   -ba : anonymize BIDS (y/n, default %c)\n", bidsCh);
+    if (opts.isSortDTIbyBVal) bidsCh = 'y'; else bidsCh = 'n';
+    printf("  -d : diffusion volumes sorted by b-value (y/n, default %c)\n", bidsCh);
     #ifdef mySegmentByAcq
      #define kQstr " %%q=sequence number,"
     #else
@@ -96,14 +98,14 @@ void showHelp(const char * argv[], struct TDCMopts opts) {
     if (opts.isGz) gzCh = 'y';
     #ifdef myDisableZLib
 		if (strlen(opts.pigzname) > 0)
-			printf("  -z : gz compress images (y/n, default %c)\n", gzCh);
+			printf("  -z : gz compress images (y/n/3, default %c) [y=pigz, n=no, 3=no,3D]\n", gzCh);
 		else
-			printf("  -z : gz compress images (y/n, default %c) [REQUIRES pigz]\n", gzCh);
+			printf("  -z : gz compress images (y/n/3, default %c)  [y=pigz(MISSING!), n=no, 3=no,3D]\n", gzCh);
     #else
     	#ifdef myDisableMiniZ
-    	printf("  -z : gz compress images (y/i/n, default %c) [y=pigz, i=internal:zlib, n=no]\n", gzCh);
+    	printf("  -z : gz compress images (y/i/n/3, default %c) [y=pigz, i=internal:zlib, n=no, 3=no,3D]\n", gzCh);
 		#else
-		printf("  -z : gz compress images (y/i/n, default %c) [y=pigz, i=internal, n=no]\n", gzCh);
+		printf("  -z : gz compress images (y/i/n/3, default %c) [y=pigz, i=internal, n=no, 3=no,3D]\n", gzCh);
 		#endif
     #endif
 
@@ -128,9 +130,11 @@ void showHelp(const char * argv[], struct TDCMopts opts) {
 int invalidParam(int i, const char * argv[]) {
 	if ((argv[i][0] == 'y') || (argv[i][0] == 'Y')
 		|| (argv[i][0] == 'n') || (argv[i][0] == 'N')
+		|| (argv[i][0] == 'o') || (argv[i][0] == 'O')
 		|| (argv[i][0] == 'h') || (argv[i][0] == 'H')
 		|| (argv[i][0] == 'i') || (argv[i][0] == 'I')
-		|| (argv[i][0] == '0') || (argv[i][0] == '1'))
+		|| (argv[i][0] == '0') || (argv[i][0] == '1')
+		|| (argv[i][0] == '2') || (argv[i][0] == '3') )
 		return 0;
 
 	//if (argv[i][0] != '-') return 0;
@@ -160,7 +164,7 @@ int main(int argc, const char * argv[])
         showHelp(argv, opts);
         return 0;
     }
-    //bool isCustomOutDir = false;
+    //for (int i = 1; i < argc; i++) { printf(" argument %d= '%s'\n", i, argv[i]);}
     int i = 1;
     int lastCommandArg = 0;
     while (i < (argc)) { //-1 as final parameter is DICOM directory
@@ -177,8 +181,11 @@ int main(int argc, const char * argv[])
                 	if (invalidParam(i, argv)) return 0;
                 	if ((argv[i][0] == 'n') || (argv[i][0] == 'N')  || (argv[i][0] == '0'))
                     	opts.isCreateBIDS = false;
-                	else
+                	else {
                     	opts.isCreateBIDS = true;
+                    	if ((argv[i][0] == 'o') || (argv[i][0] == 'O'))
+                    		opts.isOnlyBIDS = true;
+                    }
                 } else if (argv[i][2] == 'a') {//"-ba y"
                 	i++;
                 	if (invalidParam(i, argv)) return 0;
@@ -188,6 +195,13 @@ int main(int argc, const char * argv[])
                     	opts.isAnonymizeBIDS = true;
                 } else
                 	printf("Error: Unknown command line argument: '%s'\n", argv[i]);
+            } else if ((argv[i][1] == 'd') && ((i+1) < argc)) {
+                i++;
+                if (invalidParam(i, argv)) return 0;
+                if ((argv[i][0] == 'n') || (argv[i][0] == 'N')  || (argv[i][0] == '0'))
+                    opts.isSortDTIbyBVal = false;
+                else
+                    opts.isSortDTIbyBVal = true;
             } else if ((argv[i][1] == 'i') && ((i+1) < argc)) {
                 i++;
                 if (invalidParam(i, argv)) return 0;
@@ -243,7 +257,10 @@ int main(int argc, const char * argv[])
             } else if ((argv[i][1] == 'z') && ((i+1) < argc)) {
                 i++;
                 if (invalidParam(i, argv)) return 0;
-                if ((argv[i][0] == 'i') || (argv[i][0] == 'I') ) {
+                if ((argv[i][0] == '3') ) {
+                    opts.isGz = false; //uncompressed 3D
+                	opts.isSave3D = true;
+                } else if ((argv[i][0] == 'i') || (argv[i][0] == 'I') ) {
                     opts.isGz = true; //force use of internal compression instead of pigz
                 	strcpy(opts.pigzname,"");
                 } else if ((argv[i][0] == 'n') || (argv[i][0] == 'N')  || (argv[i][0] == '0'))
@@ -255,9 +272,9 @@ int main(int argc, const char * argv[])
                 strcpy(opts.filename,argv[i]);
             } else if ((argv[i][1] == 'o') && ((i+1) < argc)) {
                 i++;
-                //isCustomOutDir = true;
                 strcpy(opts.outdir,argv[i]);
-            }
+            } else
+             printf(" Error: invalid option '%s %s'\n", argv[i], argv[i+1]);;
             lastCommandArg = i;
         } //if parameter is a command
         i ++; //read next parameter
@@ -272,15 +289,21 @@ int main(int argc, const char * argv[])
         return EXIT_SUCCESS;
     }
 #endif
+	#ifndef myEnableMultipleInputs
+	if ((argc-lastCommandArg-1) > 1) {
+		printf("Warning: only processing last of %d input files (recompile with 'myEnableMultipleInputs' to recursively process multiple files)\n", argc-lastCommandArg-1);
+		lastCommandArg = argc - 2;
+	}
+	#endif
 	#if !defined(_WIN64) && !defined(_WIN32)
 	double startWall = get_wall_time();
 	#endif
     clock_t start = clock();
     for (i = (lastCommandArg+1); i < argc; i++) {
     	strcpy(opts.indir,argv[i]); // [argc-1]
-    	//if (!isCustomOutDir) strcpy(opts.outdir,opts.indir);
-    	if (nii_loadDir(&opts) != EXIT_SUCCESS)
-    		return EXIT_FAILURE;
+    	int ret = nii_loadDir(&opts);
+    	if (ret != EXIT_SUCCESS)
+    		return ret;
     }
     #if !defined(_WIN64) && !defined(_WIN32)
 		printf ("Conversion required %f seconds (%f for core code).\n",get_wall_time() - startWall, ((float)(clock()-start))/CLOCKS_PER_SEC);

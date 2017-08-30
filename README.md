@@ -9,7 +9,18 @@ dcm2niix is a designed to convert neuroimaging data from the DICOM format to the
 
 This software is open source. The bulk of the code is covered by the BSD license. Some units are either public domain (nifti*.*, miniz.c) or use the MIT license (ujpeg.cpp). See the license.txt file for more details.
 
+## Dependencies
+
+This software should run on macOS, Linux and Windows without requiring any other software. However, if you use dcm2niix to create gz-compressed images it will be faster if you have [pigz](https://github.com/madler/pigz) installed. You can get a version of both dcm2niix and pigz compiled for your operating system by downloading [MRIcroGL](https://www.nitrc.org/projects/mricrogl/).
+
 ## Versions
+
+21-Aug-2017
+ - Sort diffusion volumes by [B-value amplitude](https://www.nitrc.org/forum/forum.php?thread_id=8396&forum_id=4703) (use "-d n"/"-d y" to turn the feature off/on).
+
+18-Aug-2017
+ - Better BVec extraction for  [PAR/REC 4.1](https://www.nitrc.org/forum/forum.php?thread_id=8387&forum_id=4703).
+ - Support for [Segami Cerescan volumes](https://www.nitrc.org/forum/forum.php?thread_id=8076&forum_id=4703).
 
 24-July-2017
  - Compiles with recent releases of [OpenJPEG](https://github.com/neurolabusc/dcm_qa/issues/5#issuecomment-317443179) for JPEG2000 support.
@@ -183,3 +194,16 @@ This requires a compiler that supports c++11.
 ### Building the command line version without cmake
 
 [See the COMPILE.md file for details on manual compilation](./COMPILE.md).
+
+## Links
+
+ - [Dcm2Bids](https://github.com/cbedetti/Dcm2Bids) uses dcm2niix to create [BIDS](http://bids.neuroimaging.io/) datasets.
+  - [heudiconv](https://github.com/nipy/heudiconv) can use dcm2niix to create [BIDS](http://bids.neuroimaging.io/) datasets.
+  - [nipype](https://github.com/nipy/nipype) can use dcm2niix to convert images.
+  - [pydcm2niix is a Python module for working with dcm2niix](https://github.com/jstutters/pydcm2niix).
+  - [dcm2niir](https://github.com/muschellij2/dcm2niir) R wrapper for dcm2niix/dcm2nii.
+  - [divest](https://github.com/jonclayden/divest) R interface to dcm2niix.
+  - [sci-tran dcm2niix](https://github.com/scitran-apps/dcm2niix) docker.
+  - [neuro_docker](https://github.com/Neurita/neuro_docker) includes dcm2niix.
+  - [dcm2niix_afni](https://afni.nimh.nih.gov/pub/dist/doc/program_help/dcm2niix_afni.html) is a version of dcm2niix included with the [AFNI](https://afni.nimh.nih.gov/) distribution.
+  - [MRIcroGL](https://github.com/neurolabusc/MRIcroGL) is available for MacOS, Linux and Windows and provides a graphical interface for dcm2niix. You can get compiled copies from the [MRIcroGL NITRC web site](https://www.nitrc.org/projects/mricrogl/).
