@@ -1,6 +1,8 @@
 dcm2niix (1:1.0.20170818+git8-gdd1d994-1) neurodebian; urgency=medium
 
   * New upstream snapshot from v1.0.20170818-8-gdd1d994
+  * debian/patches/jessie-dsc-patch adjusted and linked to be applied on zesty
+    as well
 
  -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 30 Aug 2017 11:11:00 -0400
 
