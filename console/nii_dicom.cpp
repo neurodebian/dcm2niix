@@ -619,16 +619,6 @@ int headerDcm2Nii2(struct TDICOMdata d, struct TDICOMdata d2, struct nifti_1_hea
         sprintf(dtxt, ";phase=%d", d.CSA.phaseEncodingDirectionPositive);
         strcat(txt,dtxt);
     }
-    if ((d.CSA.bandwidthPerPixelPhaseEncode > 0) && ((d.phaseEncodingRC =='C') || (d.phaseEncodingRC =='R'))) {
-        float dwellTime = 0;
-        if (d.phaseEncodingRC =='C')
-            dwellTime =  1000/d.CSA.bandwidthPerPixelPhaseEncode/h->dim[2];
-        else
-            dwellTime =  1000/d.CSA.bandwidthPerPixelPhaseEncode/h->dim[1];
-        char dtxt[1024] = {""};
-        sprintf(dtxt, ";dwell=%.3f", dwellTime);
-        strcat(txt,dtxt);
-    }
     //from dicm2nii 20151117 InPlanePhaseEncodingDirection
     if (d.phaseEncodingRC =='R')
         h->dim_info = (3 << 4) + (1 << 2) + 2;
@@ -686,6 +676,8 @@ struct TDICOMdata clear_dicom_data() {
     strcpy(d.institutionAddress, "");
     strcpy(d.deviceSerialNumber, "");
     strcpy(d.softwareVersions, "");
+    strcpy(d.stationName, "");
+    strcpy(d.scanOptions, "");
     strcpy(d.seriesInstanceUID, "");
     strcpy(d.studyID, "");
     strcpy(d.studyInstanceUID, "");
@@ -710,6 +702,8 @@ struct TDICOMdata clear_dicom_data() {
     d.numberOfDynamicScans = 0;
     d.echoNum = 1;
     d.echoTrainLength = 0;
+    d.phaseFieldofView = 0.0;
+    d.dwellTime = 0;
     d.phaseEncodingSteps = 0;
     d.coilNum = 1;
     d.accelFactPE = 0.0;
@@ -763,6 +757,21 @@ struct TDICOMdata clear_dicom_data() {
     d.CSA.SeriesHeader_length = 0;
     return d;
 } //clear_dicom_data()
+
+void dcmStrDigitsOnlyKey(char key, char* lStr) {
+    //e.g. string "p2s3" returns 2 if key=="p" and 3 if key=="s"
+    size_t len = strlen(lStr);
+    if (len < 1) return;
+    bool isKey = false;
+    for (int i = 0; i < (int) len; i++) {
+        if (!isdigit(lStr[i]) ) {
+            isKey =  (lStr[i] == key);
+            lStr[i] = ' ';
+
+        } else if (!isKey)
+        	lStr[i] = ' ';
+    }
+} //dcmStrDigitsOnlyKey()
 
 void dcmStrDigitsOnly(char* lStr) {
     //e.g. change "H11" to " 11"
@@ -996,7 +1005,8 @@ bool csaIsPhaseMap (unsigned char buff[], int nItems) {
     return false;
 } //csaIsPhaseMap()
 
-int readCSAImageHeader(unsigned char *buff, int lLength, struct TCSAdata *CSA, int isVerbose, struct TDTI4D *dti4D) {
+//int readCSAImageHeader(unsigned char *buff, int lLength, struct TCSAdata *CSA, int isVerbose, struct TDTI4D *dti4D) {
+int readCSAImageHeader(unsigned char *buff, int lLength, struct TCSAdata *CSA, int isVerbose) {
     //see also http://afni.nimh.nih.gov/pub/dist/src/siemens_dicom_csa.c
     //printMessage("%c%c%c%c\n",buff[0],buff[1],buff[2],buff[3]);
     if (lLength < 36) return EXIT_FAILURE;
@@ -1676,7 +1686,8 @@ size_t nii_ImgBytes(struct nifti_1_header hdr) {
     return imgsz;
 } //nii_ImgBytes()
 
-unsigned char * nii_demosaic(unsigned char* inImg, struct nifti_1_header *hdr, int nMosaicSlices, int ProtocolSliceNumber1) {
+//unsigned char * nii_demosaic(unsigned char* inImg, struct nifti_1_header *hdr, int nMosaicSlices, int ProtocolSliceNumber1) {
+unsigned char * nii_demosaic(unsigned char* inImg, struct nifti_1_header *hdr, int nMosaicSlices) {
     //demosaic http://nipy.org/nibabel/dicom/dicom_mosaic.html
     if (nMosaicSlices < 2) return inImg;
     //Byte inImg[ [img length] ];
@@ -2064,8 +2075,7 @@ unsigned char * nii_XYTZ_XYZT(unsigned char* bImg, struct nifti_1_header *hdr, i
     //memcpy(&tempImg[0], &bImg[0], imgSz);
     uint64_t origPos = 0;
     uint64_t Pos = 0; //
-
-    for (int t = 0; t < typeRepeats; t++) { //for each volume
+    for (int t = 0; t < (int)typeRepeats; t++) { //for each volume
         for (int s = 0; s < seqRepeats; s++) {
             origPos = (t*typeBytes) +s*sliceBytes;
             for (int z = 0; z < hdr->dim[3]; z++) { //for each slice
@@ -2245,7 +2255,7 @@ TJPEG *  decode_JPEG_SOF_0XC3_stack (const char *fn, int skipBytes, bool isVerbo
     unsigned char *lRawRA = (unsigned char*) malloc(lRawSz);
     size_t lSz = fread(lRawRA, 1, lRawSz, reader);
     fclose(reader);
-    if (lSz < lRawSz) {
+    if (lSz < (size_t)lRawSz) {
         printError("Unable to read %s\n", fn);
         abortGoto(); //read failure
     }
@@ -2335,7 +2345,8 @@ unsigned char * nii_loadImgJPEGC3(char* imgname, struct nifti_1_header hdr, stru
 
 #ifdef myTurboJPEG //if turboJPEG instead of nanoJPEG for classic JPEG decompression
 
-unsigned char * nii_loadImgJPEG50(char* imgname, struct nifti_1_header hdr, struct TDICOMdata dcm) {
+//unsigned char * nii_loadImgJPEG50(char* imgname, struct nifti_1_header hdr, struct TDICOMdata dcm) {
+unsigned char * nii_loadImgJPEG50(char* imgname, struct TDICOMdata dcm) {
 //decode classic JPEG using nanoJPEG
     //printMessage("50 offset %d\n", dcm.imageStart);
     if ((dcm.samplesPerPixel != 1) && (dcm.samplesPerPixel != 3)) {
@@ -2385,7 +2396,8 @@ unsigned char * nii_loadImgJPEG50(char* imgname, struct nifti_1_header hdr, stru
 
 #else //if turboJPEG else use nanojpeg...
 
-unsigned char * nii_loadImgJPEG50(char* imgname, struct nifti_1_header hdr, struct TDICOMdata dcm) {
+//unsigned char * nii_loadImgJPEG50(char* imgname, struct nifti_1_header hdr, struct TDICOMdata dcm) {
+unsigned char * nii_loadImgJPEG50(char* imgname, struct TDICOMdata dcm) {
 //decode classic JPEG using nanoJPEG
     //printMessage("50 offset %d\n", dcm.imageStart);
     if( access(imgname, F_OK ) == -1 ) {
@@ -2448,7 +2460,7 @@ unsigned char * nii_loadImgRLE(char* imgname, struct nifti_1_header hdr, struct 
     }
 	fseek(file, 0, SEEK_END);
 	long fileLen=ftell(file);
-    if (fileLen < (dcm.imageBytes+dcm.imageStart)) {
+    if ((fileLen < 1) || (dcm.imageBytes < 1) || (fileLen < (dcm.imageBytes+dcm.imageStart))) {
         printMessage("File not large enough to store image data: %s\n", imgname);
         fclose(file);
         return NULL;
@@ -2458,7 +2470,7 @@ unsigned char * nii_loadImgRLE(char* imgname, struct nifti_1_header hdr, struct 
     unsigned char *cImg = (unsigned char *)malloc(dcm.imageBytes); //compressed input
     size_t  sz = fread(cImg, 1, dcm.imageBytes, file);
 	fclose(file);
-	if (sz < dcm.imageBytes) {
+	if (sz < (size_t)dcm.imageBytes) {
          printError("Only loaded %zu of %d bytes for %s\n", sz, dcm.imageBytes, imgname);
          free(cImg);
          return NULL;
@@ -2467,17 +2479,17 @@ unsigned char * nii_loadImgRLE(char* imgname, struct nifti_1_header hdr, struct 
     bool swap = (dcm.isLittleEndian != littleEndianPlatform());
 	int bytesPerSample = dcm.samplesPerPixel * (dcm.bitsAllocated / 8);
 	uint32_t bytesPerSampleRLE = rleInt(0, cImg, swap);
-	if (bytesPerSampleRLE != (bytesPerSample)) {
+	if ((bytesPerSample < 0) || (bytesPerSampleRLE != (uint32_t)bytesPerSample)) {
 		printError("RLE header corrupted %d != %d\n", bytesPerSampleRLE, bytesPerSample);
 		free(cImg);
 		return NULL;
 	}
 	unsigned char *bImg = (unsigned char *)malloc(imgsz); //binary output
-	for (int i = 0; i < imgsz; i++)
+	for (size_t i = 0; i < imgsz; i++)
 		bImg[i] = 0;
     for (int i = 0; i < bytesPerSample; i++) {
 		uint32_t offset = rleInt(i+1, cImg, swap);
-		if (offset > dcm.imageBytes) {
+		if ((dcm.imageBytes < 0) || (offset > (uint32_t)dcm.imageBytes)) {
 			printError("RLE header error\n");
 			free(cImg);
 			free(bImg);
@@ -2521,6 +2533,13 @@ unsigned char * nii_loadImgRLE(char* imgname, struct nifti_1_header hdr, struct 
     return bImg;
 } // nii_loadImgRLE()
 
+#ifdef myDisableOpenJPEG
+ #ifndef myEnableJasper
+  //avoid compiler warning, see https://stackoverflow.com/questions/3599160/unused-parameter-warnings-in-c
+  #define UNUSED(x) (void)(x)
+ #endif
+#endif
+
 unsigned char * nii_loadImgXL(char* imgname, struct nifti_1_header *hdr, struct TDICOMdata dcm, bool iVaries, int compressFlag, int isVerbose) {
 //provided with a filename (imgname) and DICOM header (dcm), creates NIfTI header (hdr) and img
     if (headerDcm2Nii(dcm, hdr, true) == EXIT_FAILURE) return NULL; //TOFU
@@ -2530,7 +2549,8 @@ unsigned char * nii_loadImgXL(char* imgname, struct nifti_1_header *hdr, struct 
         	printMessage("Software not compiled to decompress classic JPEG DICOM images\n");
         	return NULL;
     	#else
-        	img = nii_loadImgJPEG50(imgname, *hdr, dcm);
+        	//img = nii_loadImgJPEG50(imgname, *hdr, dcm);
+    		img = nii_loadImgJPEG50(imgname, dcm);
     		if (hdr->datatype ==DT_RGB24) //convert to planar
         		img = nii_rgb2planar(img, hdr, dcm.isPlanarRGB);//do this BEFORE Y-Flip, or RGB order can be flipped
         #endif
@@ -2551,6 +2571,8 @@ unsigned char * nii_loadImgXL(char* imgname, struct nifti_1_header *hdr, struct 
         if ((dcm.compressionScheme == kCompressYes) && (compressFlag != kCompressNone) )
             img = nii_loadImgCoreJasper(imgname, *hdr, dcm, compressFlag);
         else
+        #else
+        UNUSED(compressFlag); //avoid compiler -Wunused-parameter warning: compressFlag required when  myEnableJasper or not myDisableOpenJPEG
         #endif
     #endif
     if (dcm.compressionScheme == kCompressYes) {
@@ -2565,7 +2587,7 @@ unsigned char * nii_loadImgXL(char* imgname, struct nifti_1_header *hdr, struct 
         img = nii_rgb2planar(img, hdr, dcm.isPlanarRGB);//do this BEFORE Y-Flip, or RGB order can be flipped
     dcm.isPlanarRGB = true;
     if (dcm.CSA.mosaicSlices > 1) {
-        img = nii_demosaic(img, hdr, dcm.CSA.mosaicSlices, dcm.CSA.protocolSliceNumber1);
+        img = nii_demosaic(img, hdr, dcm.CSA.mosaicSlices); //, dcm.CSA.protocolSliceNumber1);
         /* we will do this in nii_dicom_batch #ifdef obsolete_mosaic_flip
          img = nii_flipImgY(img, hdr);
          #endif*/
@@ -2652,7 +2674,7 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
 	#else
 	size_t MaxBufferSz = 1000000; //ideally size of DICOM header, but this varies from 2D to 4D files
 	#endif
-	if (MaxBufferSz > fileLen)
+	if (MaxBufferSz > (size_t)fileLen)
 		MaxBufferSz = fileLen;
 	//printf("%d -> %d\n", MaxBufferSz, fileLen);
 	long lFileOffset = 0;
@@ -2691,6 +2713,7 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
 #define  kInstitutionName 0x0008+(0x0080 << 16 )
 #define  kInstitutionAddress 0x0008+(0x0081 << 16 )
 #define  kReferringPhysicianName 0x0008+(0x0090 << 16 )
+#define  kStationName 0x0008+(0x1010 << 16 )
 #define  kSeriesDescription 0x0008+(0x103E << 16 ) // '0008' '103E' 'LO' 'SeriesDescription'
 #define  kManufacturersModelName 0x0008+(0x1090 << 16 )
 #define  kDerivationDescription 0x0008+(0x2111 << 16 )
@@ -2701,6 +2724,7 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
 #define  kBodyPartExamined 0x0018+(0x0015 << 16)
 #define  kScanningSequence 0x0018+(0x0020 << 16)
 #define  kSequenceVariant 0x0018+(0x0021 << 16)
+#define  kScanOptions 0x0018+(0x0022 << 16)
 #define  kMRAcquisitionType 0x0018+(0x0023 << 16)
 #define  kSequenceName 0x0018+(0x0024 << 16)
 #define  kZThick  0x0018+(0x0050 << 16 )
@@ -2712,6 +2736,7 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
 #define  kZSpacing  0x0018+(0x0088 << 16 ) //'DS' 'SpacingBetweenSlices'
 #define  kPhaseEncodingSteps  0x0018+(0x0089 << 16 ) //'IS'
 #define  kEchoTrainLength  0x0018+(0x0091 << 16 ) //IS
+#define  kPhaseFieldofView  0x0018+(0x0094 << 16 ) //'DS'
 #define  kDeviceSerialNumber  0x0018+(0x1000 << 16 ) //LO
 #define  kSoftwareVersions  0x0018+(0x1020 << 16 ) //LO
 #define  kProtocolName  0x0018+(0x1030<< 16 )
@@ -2725,6 +2750,7 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
 #define  kInPlanePhaseEncodingDirection  0x0018+(0x1312<< 16 ) //CS
 #define  kPatientOrient  0x0018+(0x5100<< 16 )    //0018,5100. patient orientation - 'HFS'
 //#define  kDiffusionBFactorSiemens  0x0019+(0x100C<< 16 ) //   0019;000C;SIEMENS MR HEADER  ;B_value
+#define  kDwellTime  0x0019+(0x1018<< 16 ) //IS in NSec, see https://github.com/rordenlab/dcm2niix/issues/127
 #define  kLastScanLoc  0x0019+(0x101B<< 16 )
 #define  kDiffusionDirectionGEX  0x0019+(0x10BB<< 16 ) //DS
 #define  kDiffusionDirectionGEY  0x0019+(0x10BC<< 16 ) //DS
@@ -2794,9 +2820,9 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
 #define  kImageStart 0x7FE0+(0x0010 << 16 )
 #define  kImageStartFloat 0x7FE0+(0x0008 << 16 )
 #define  kImageStartDouble 0x7FE0+(0x0009 << 16 )
-#define kNest 0xFFFE +(0xE000 << 16 ) //Item follows SQ
-#define  kUnnest  0xFFFE +(0xE00D << 16 ) //ItemDelimitationItem [length defined] http://www.dabsoft.ch/dicom/5/7.5/
-#define  kUnnest2 0xFFFE +(0xE0DD << 16 )//SequenceDelimitationItem [length undefined]
+uint32_t kNest = 0xFFFE +(0xE000 << 16 ); //#define kNest 0xFFFE +(0xE000 << 16 ) //Item follows SQ
+uint32_t kUnnest = 0xFFFE +(0xE00D << 16 ); //#define  kUnnest  0xFFFE +(0xE00D << 16 ) //ItemDelimitationItem [length defined] http://www.dabsoft.ch/dicom/5/7.5/
+uint32_t kUnnest2 = 0xFFFE +(0xE0DD << 16 ); //#define  kUnnest2 0xFFFE +(0xE0DD << 16 )//SequenceDelimitationItem [length undefined]
     int nest = 0;
     double zSpacing = -1.0l; //includes slice thickness plus gap
     int locationsInAcquisitionGE = 0;
@@ -2834,10 +2860,9 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
     float patientPositionStartPhilips[4] = {NAN, NAN, NAN, NAN};
     while ((d.imageStart == 0) && ((lPos+8+lFileOffset) <  fileLen)) {
     	#ifndef myLoadWholeFileToReadHeader //read one segment at a time
-    	if ((lPos + 128) > MaxBufferSz) { //avoid overreading the file
+    	if ((size_t)(lPos + 128) > MaxBufferSz) { //avoid overreading the file
     		lFileOffset = lFileOffset + lPos;
-    		if ((lFileOffset+MaxBufferSz) > fileLen)
-    			MaxBufferSz = fileLen - lFileOffset;
+    		if ((lFileOffset+MaxBufferSz) > (size_t)fileLen) MaxBufferSz = fileLen - lFileOffset;
 			fseek(file, lFileOffset, SEEK_SET);
 			size_t sz = fread(buffer, 1, MaxBufferSz, file);
 			if (sz < MaxBufferSz) {
@@ -2863,6 +2888,7 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
         } //transfer syntax requests switching VR after group 0001
         //uint32_t group = (groupElement & 0xFFFF);
         lPos += 4;
+    if ((groupElement == kUnnest) || (groupElement == kUnnest2)) isIconImageSequence = false;
     if (((groupElement == kNest) || (groupElement == kUnnest) || (groupElement == kUnnest2)) && (!isEncapsulatedData)) {
         //if (((groupElement == kNest) || (groupElement == kUnnest) || (groupElement == kUnnest2)) ) {
             vr[0] = 'N';
@@ -3068,6 +3094,9 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
             case kPatientID :
                 dcmStr (lLength, &buffer[lPos], d.patientID);
                 break;
+            case kStationName :
+                dcmStr (lLength, &buffer[lPos], d.stationName);
+                break;
             case kSeriesDescription: {
                 dcmStr (lLength, &buffer[lPos], d.seriesDescription);
                 break; }
@@ -3096,6 +3125,9 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
             case kPatientOrient :
                 dcmStr (lLength, &buffer[lPos], d.patientOrient);
                 break;
+            case kDwellTime :
+            	d.dwellTime  =  dcmStrInt(lLength, &buffer[lPos]);
+            	break;
             case kLastScanLoc :
                 d.lastScanLoc = dcmStrFloat(lLength, &buffer[lPos]);
                 break;
@@ -3238,6 +3270,9 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
             case kEchoTrainLength :
             	d.echoTrainLength  =  dcmStrInt(lLength, &buffer[lPos]);
             	break;
+            case kPhaseFieldofView :
+            	d.phaseFieldofView = dcmStrFloat(lLength, &buffer[lPos]);
+                break;
         	case kAcquisitionMatrix :
 				if (lLength == 8) {
                 	uint16_t acquisitionMatrix[4];
@@ -3301,7 +3336,7 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
             	char accelStr[kDICOMStr];
                 dcmStr (lLength, &buffer[lPos], accelStr);
                 char *ptr;
-                dcmStrDigitsOnly(accelStr);
+                dcmStrDigitsOnlyKey('p', accelStr); //e.g. if "p2s4" return "2", if "s4" return ""
                 d.accelFactPE = (float)strtof(accelStr, &ptr);
                 if (*ptr != '\0')
                 	d.accelFactPE = 0.0;
@@ -3337,6 +3372,9 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
                 dcmStr (lLength, &buffer[lPos], d.sequenceVariant);
                 break;
             }
+            case kScanOptions:
+            	dcmStr (lLength, &buffer[lPos], d.scanOptions);
+            	break;
             case kSequenceName : {
                 //if (strlen(d.protocolName) < 1) //precedence given to kProtocolName and kProtocolNameGE
                 dcmStr (lLength, &buffer[lPos], d.sequenceName);
@@ -3463,7 +3501,7 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
                 printMessage("Skipping DICOM (audio not image) '%s'\n", fname);
                 break;
             case kCSAImageHeaderInfo:
-            	readCSAImageHeader(&buffer[lPos], lLength, &d.CSA, isVerbose, dti4D);
+            	readCSAImageHeader(&buffer[lPos], lLength, &d.CSA, isVerbose); //, dti4D);
                 d.isHasPhase = d.CSA.isPhaseMap;
                 break;
                 //case kObjectGraphics:
@@ -3547,7 +3585,7 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
             	tagStr[0] = 'X'; //avoid compiler warning: orientStr filled by dcmStr
                 dcmStr (lLength, &buffer[lPos], tagStr);
                 if (strlen(tagStr) > 1) {
-                	for (int pos = 0; pos<strlen(tagStr); pos ++)
+                	for (size_t pos = 0; pos<strlen(tagStr); pos ++)
 						if ((tagStr[pos] == '<') || (tagStr[pos] == '>') || (tagStr[pos] == ':')
             				|| (tagStr[pos] == '"') || (tagStr[pos] == '\\') || (tagStr[pos] == '/')
            					|| (tagStr[pos] == '^') || (tagStr[pos] < 33)
