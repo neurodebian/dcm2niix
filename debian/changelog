@@ -1,3 +1,9 @@
+dcm2niix (1:1.0.20170923-1) neurodebian; urgency=medium
+
+  * New upstream release
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Thu, 28 Sep 2017 12:09:29 -0400
+
 dcm2niix (1:1.0.20170818+git8-gdd1d994-1) neurodebian; urgency=medium
 
   * New upstream snapshot from v1.0.20170818-8-gdd1d994
