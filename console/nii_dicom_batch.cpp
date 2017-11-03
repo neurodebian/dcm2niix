@@ -93,8 +93,9 @@ void dropFilenameFromPath(char *path) { //
     if (strlen(path) == 0) { //file name did not specify path, assume relative path and return current working directory
     	//strcat (path,"."); //relative path - use cwd <- not sure if this works on Windows!
     	char cwd[1024];
-   		getcwd(cwd, sizeof(cwd));
-   		strcat (path,cwd);
+   		char* ok = getcwd(cwd, sizeof(cwd));
+   		if (ok !=NULL)
+   			strcat (path,cwd);
     }
 }
 
@@ -337,9 +338,9 @@ void nii_SaveText(char pathoutname[], struct TDICOMdata d, struct TDCMopts opts,
     strcat (txtname,".txt");
     //printMessage("Saving text %s\n",txtname);
     FILE *fp = fopen(txtname, "w");
-    fprintf(fp, "%s\tField Strength:\t%g\tProtocolName:\t%s\tScanningSequence00180020:\t%s\tTE:\t%g\tTR:\t%g\tSeriesNum:\t%ld\tAcquNum:\t%d\tImageNum:\t%d\tImageComments:\t%s\tDateTime:\t%f\tName:\t%s\tConvVers:\t%s\tDoB:\t%s\tGender:\t%s\tAge:\t%s\tDimXYZT:\t%d\t%d\t%d\t%d\tCoil:\t%d\tEchoNum:\t%d\tOrient(6)\t%g\t%g\t%g\t%g\t%g\t%g\tbitsAllocated\t%d\tInputName\t%s\n",
+    fprintf(fp, "%s\tField Strength:\t%g\tProtocolName:\t%s\tScanningSequence00180020:\t%s\tTE:\t%g\tTR:\t%g\tSeriesNum:\t%ld\tAcquNum:\t%d\tImageNum:\t%d\tImageComments:\t%s\tDateTime:\t%f\tName:\t%s\tConvVers:\t%s\tDoB:\t%s\tGender:\t%c\tAge:\t%s\tDimXYZT:\t%d\t%d\t%d\t%d\tCoil:\t%d\tEchoNum:\t%d\tOrient(6)\t%g\t%g\t%g\t%g\t%g\t%g\tbitsAllocated\t%d\tInputName\t%s\n",
       pathoutname, d.fieldStrength, d.protocolName, d.scanningSequence, d.TE, d.TR, d.seriesNum, d.acquNum, d.imageNum, d.imageComments,
-      d.dateTime, d.patientName, kDCMvers, d.birthDate, d.gender, d.age, h->dim[1], h->dim[2], h->dim[3], h->dim[4],
+      d.dateTime, d.patientName, kDCMvers, d.patientBirthDate, d.patientSex, d.patientAge, h->dim[1], h->dim[2], h->dim[3], h->dim[4],
             d.coilNum,d.echoNum, d.orient[1], d.orient[2], d.orient[3], d.orient[4], d.orient[5], d.orient[6],
             d.bitsAllocated, dcmname);
     fclose(fp);
@@ -490,19 +491,25 @@ int phoenixOffsetCSASeriesHeader(unsigned char *buff, int lLength) {
     return 0;
 } // phoenixOffsetCSASeriesHeader()
 
-void siemensCsaAscii(const char * filename,  int csaOffset, int csaLength, float* phaseOversampling, float* phaseResolution, int* baseResolution, int* interp, int* partialFourier, int* echoSpacing, int* parallelReductionFactorInPlane, char* coilID, char* consistencyInfo, char* coilElements, char* pulseSequenceDetails, char* fmriExternalInfo) {
+void siemensCsaAscii(const char * filename,  int csaOffset, int csaLength, float* delayTimeInTR, float* phaseOversampling, float* phaseResolution, float* txRefAmp, float* shimSetting, int* baseResolution, int* interp, int* partialFourier, int* echoSpacing, int* parallelReductionFactorInPlane, char* coilID, char* consistencyInfo, char* coilElements, char* pulseSequenceDetails, char* fmriExternalInfo, char * protocolName) {
  //reads ASCII portion of CSASeriesHeaderInfo and returns lEchoTrainDuration or lEchoSpacing value
  // returns 0 if no value found
+ 	*delayTimeInTR = 0.0;
  	*phaseOversampling = 0.0;
  	*phaseResolution = 0.0;
+ 	*txRefAmp = 0.0;
  	*baseResolution = 0;
  	*interp = 0;
  	*partialFourier = 0;
  	*echoSpacing = 0;
+ 	for (int i = 0; i < 8; i++)
+ 		shimSetting[i] = 0.0;
  	strcpy(coilID, "");
  	strcpy(consistencyInfo, "");
  	strcpy(coilElements, "");
  	strcpy(pulseSequenceDetails, "");
+ 	strcpy(fmriExternalInfo, "");
+ 	strcpy(protocolName, "");
  	if ((csaOffset < 0) || (csaLength < 8)) return;
 	FILE * pFile = fopen ( filename, "rb" );
 	if(pFile==NULL) return;
@@ -557,10 +564,41 @@ void siemensCsaAscii(const char * filename,  int csaOffset, int csaLength, float
 		readKeyStr(keyStrSeq,  keyPos, csaLengthTrim, pulseSequenceDetails);
 		char keyStrExt[] = "FmriExternalInfo";
 		readKeyStr(keyStrExt,  keyPos, csaLengthTrim, fmriExternalInfo);
-		char keyStrPhase[] = "sKSpace.dPhaseResolution";
-		*phaseResolution = readKeyFloat(keyStrPhase, keyPos, csaLengthTrim);
+		char keyStrPn[] = "tProtocolName";
+		readKeyStr(keyStrPn,  keyPos, csaLengthTrim, protocolName);
+		char keyStrDelay[] = "lDelayTimeInTR";
+		*delayTimeInTR = readKeyFloat(keyStrDelay, keyPos, csaLengthTrim);
 		char keyStrOver[] = "sKSpace.dPhaseOversamplingForDialog";
 		*phaseOversampling = readKeyFloat(keyStrOver, keyPos, csaLengthTrim);
+		char keyStrPhase[] = "sKSpace.dPhaseResolution";
+		*phaseResolution = readKeyFloat(keyStrPhase, keyPos, csaLengthTrim);
+		char keyStrAmp[] = "sTXSPEC.asNucleusInfo[0].flReferenceAmplitude";
+		*txRefAmp = readKeyFloat(keyStrAmp, keyPos, csaLengthTrim);
+		//lower order shims: newer sequences
+		char keyStrSh0[] = "sGRADSPEC.asGPAData[0].lOffsetX";
+		shimSetting[0] = readKeyFloat(keyStrSh0, keyPos, csaLengthTrim);
+		char keyStrSh1[] = "sGRADSPEC.asGPAData[0].lOffsetY";
+		shimSetting[1] = readKeyFloat(keyStrSh1, keyPos, csaLengthTrim);
+		char keyStrSh2[] = "sGRADSPEC.asGPAData[0].lOffsetZ";
+		shimSetting[2] = readKeyFloat(keyStrSh2, keyPos, csaLengthTrim);
+		//lower order shims: older sequences
+		char keyStrSh0s[] = "sGRADSPEC.lOffsetX";
+		if (shimSetting[0] == 0.0) shimSetting[0] = readKeyFloat(keyStrSh0s, keyPos, csaLengthTrim);
+		char keyStrSh1s[] = "sGRADSPEC.lOffsetY";
+		if (shimSetting[1] == 0.0) shimSetting[1] = readKeyFloat(keyStrSh1s, keyPos, csaLengthTrim);
+		char keyStrSh2s[] = "sGRADSPEC.lOffsetZ";
+		if (shimSetting[2] == 0.0) shimSetting[2] = readKeyFloat(keyStrSh2s, keyPos, csaLengthTrim);
+		//higher order shims: older sequences
+		char keyStrSh3[] = "sGRADSPEC.alShimCurrent[0]";
+		shimSetting[3] = readKeyFloat(keyStrSh3, keyPos, csaLengthTrim);
+		char keyStrSh4[] = "sGRADSPEC.alShimCurrent[1]";
+		shimSetting[4] = readKeyFloat(keyStrSh4, keyPos, csaLengthTrim);
+		char keyStrSh5[] = "sGRADSPEC.alShimCurrent[2]";
+		shimSetting[5] = readKeyFloat(keyStrSh5, keyPos, csaLengthTrim);
+		char keyStrSh6[] = "sGRADSPEC.alShimCurrent[3]";
+		shimSetting[6] = readKeyFloat(keyStrSh6, keyPos, csaLengthTrim);
+		char keyStrSh7[] = "sGRADSPEC.alShimCurrent[4]";
+		shimSetting[7] = readKeyFloat(keyStrSh7, keyPos, csaLengthTrim);
 	}
 	fclose (pFile);
 	free (buffer);
@@ -641,6 +679,7 @@ void nii_SaveBIDS(char pathoutname[], struct TDICOMdata d, struct TDCMopts opts,
 	};
 	json_Str(fp, "\t\"ManufacturersModelName\": \"%s\",\n", d.manufacturersModelName);
 	json_Str(fp, "\t\"InstitutionName\": \"%s\",\n", d.institutionName);
+	json_Str(fp, "\t\"InstitutionalDepartmentName\": \"%s\",\n", d.institutionalDepartmentName);
 	json_Str(fp, "\t\"InstitutionAddress\": \"%s\",\n", d.institutionAddress);
 	json_Str(fp, "\t\"DeviceSerialNumber\": \"%s\",\n", d.deviceSerialNumber );
 	json_Str(fp, "\t\"StationName\": \"%s\",\n", d.stationName );
@@ -650,12 +689,20 @@ void nii_SaveBIDS(char pathoutname[], struct TDICOMdata d, struct TDCMopts opts,
 		json_Str(fp, "\t\"ReferringPhysicianName\": \"%s\",\n", d.referringPhysicianName);
 		json_Str(fp, "\t\"StudyID\": \"%s\",\n", d.studyID);
 		//Next lines directly reveal patient identity
-		// json_Str(fp, "\t\"PatientName\": \"%s\",\n", d.patientName);
-		// json_Str(fp, "\t\"PatientID\": \"%s\",\n", d.patientID);
+		json_Str(fp, "\t\"PatientName\": \"%s\",\n", d.patientName);
+		json_Str(fp, "\t\"PatientID\": \"%s\",\n", d.patientID);
+		if (d.patientSex != '?') fprintf(fp, "\t\"PatientSex\": \"%c\",\n",  d.patientSex);
+		json_Float(fp, "\t\"PatientWeight\": %g,\n", d.patientWeight);
+		//d.patientBirthDate //convert from DICOM  YYYYMMDD to JSON
+		//d.patientAge //4-digit Age String: nnnD, nnnW, nnnM, nnnY;
 	}
 	json_Str(fp, "\t\"BodyPartExamined\": \"%s\",\n", d.bodyPartExamined);
+	json_Str(fp, "\t\"PatientPosition\": \"%s\",\n", d.patientOrient);  // 0018,5100 = PatientPosition in DICOM
 	json_Str(fp, "\t\"ProcedureStepDescription\": \"%s\",\n", d.procedureStepDescription);
 	json_Str(fp, "\t\"SoftwareVersions\": \"%s\",\n", d.softwareVersions);
+	//json_Str(fp, "\t\"MRAcquisitionType\": \"%s\",\n", d.mrAcquisitionType);
+	if (d.is2DAcq)  fprintf(fp, "\t\"MRAcquisitionType\": \"2D\",\n");
+	if (d.is3DAcq)  fprintf(fp, "\t\"MRAcquisitionType\": \"3D\",\n");
 	json_Str(fp, "\t\"SeriesDescription\": \"%s\",\n", d.seriesDescription);
 	json_Str(fp, "\t\"ProtocolName\": \"%s\",\n", d.protocolName);
 	json_Str(fp, "\t\"ScanningSequence\": \"%s\",\n", d.scanningSequence);
@@ -678,6 +725,7 @@ void nii_SaveBIDS(char pathoutname[], struct TDICOMdata d, struct TDCMopts opts,
 	}
 	if (d.isDerived) //DICOM is derived image or non-spatial file (sounds, etc)
 		fprintf(fp, "\t\"RawImage\": false,\n");
+	if (d.seriesNum > 0) fprintf(fp, "\t\"SeriesNumber\": %ld,\n", d.seriesNum);
 	//Chris Gorgolewski: BIDS standard specifies ISO8601 date-time format (Example: 2016-07-06T12:49:15.679688)
 	//Lines below directly save DICOM values
 	if (d.acquisitionTime > 0.0 && d.acquisitionDate > 0.0){
@@ -726,6 +774,12 @@ void nii_SaveBIDS(char pathoutname[], struct TDICOMdata d, struct TDCMopts opts,
 	//CT parameters
 	if ((d.TE > 0.0) && (d.isXRay)) fprintf(fp, "\t\"XRayExposure\": %g,\n", d.TE );
     //MRI parameters
+    if (!d.isXRay) { //with CT scans, slice thickness often varies
+    	//beware, not used correctly by all vendors https://public.kitware.com/pipermail/insight-users/2005-September/014711.html
+    	json_Float(fp, "\t\"SliceThickness\": %g,\n", d.zThick );
+    	json_Float(fp, "\t\"SpacingBetweenSlices\": %g,\n", d.zSpacing);
+    }
+	json_Float(fp, "\t\"SAR\": %g,\n", d.SAR );
 	if (d.echoNum > 1) fprintf(fp, "\t\"EchoNumber\": %d,\n", d.echoNum);
 	if ((d.TE > 0.0) && (!d.isXRay)) fprintf(fp, "\t\"EchoTime\": %g,\n", d.TE / 1000.0 );
     json_Float(fp, "\t\"RepetitionTime\": %g,\n", d.TR / 1000.0 );
@@ -737,9 +791,9 @@ void nii_SaveBIDS(char pathoutname[], struct TDICOMdata d, struct TDCMopts opts,
 	#ifdef myReadAsciiCsa
 	if ((d.manufacturer == kMANUFACTURER_SIEMENS) && (d.CSA.SeriesHeader_offset > 0) && (d.CSA.SeriesHeader_length > 0)) {
 		int baseResolution, interpInt, partialFourier, echoSpacing, parallelReductionFactorInPlane;
-		float phaseResolution;
-		char fmriExternalInfo[kDICOMStr], coilID[kDICOMStr], consistencyInfo[kDICOMStr], coilElements[kDICOMStr], pulseSequenceDetails[kDICOMStr];
-		siemensCsaAscii(filename,  d.CSA.SeriesHeader_offset, d.CSA.SeriesHeader_length, &phaseOversampling, &phaseResolution, &baseResolution, &interpInt, &partialFourier, &echoSpacing, &parallelReductionFactorInPlane, coilID, consistencyInfo, coilElements, pulseSequenceDetails, fmriExternalInfo);
+		float delayTimeInTR, phaseResolution, txRefAmp, shimSetting[8];
+		char protocolName[kDICOMStr], fmriExternalInfo[kDICOMStr], coilID[kDICOMStr], consistencyInfo[kDICOMStr], coilElements[kDICOMStr], pulseSequenceDetails[kDICOMStr];
+		siemensCsaAscii(filename,  d.CSA.SeriesHeader_offset, d.CSA.SeriesHeader_length, &delayTimeInTR, &phaseOversampling, &phaseResolution, &txRefAmp, shimSetting, &baseResolution, &interpInt, &partialFourier, &echoSpacing, &parallelReductionFactorInPlane, coilID, consistencyInfo, coilElements, pulseSequenceDetails, fmriExternalInfo, protocolName);
 		if (partialFourier > 0) {
 			//https://github.com/ismrmrd/siemens_to_ismrmrd/blob/master/parameter_maps/IsmrmrdParameterMap_Siemens_EPI_FLASHREF.xsl
 			if (partialFourier == 1) pf = 0.5; // 4/8
@@ -753,6 +807,20 @@ void nii_SaveBIDS(char pathoutname[], struct TDICOMdata d, struct TDCMopts opts,
 			fprintf(fp, "\t\"Interpolation2D\": %d,\n", interp);
 		}
 		if (baseResolution > 0) fprintf(fp, "\t\"BaseResolution\": %d,\n", baseResolution );
+		if (shimSetting[0] != 0.0) {
+			fprintf(fp, "\t\"ShimSetting\": [\n");
+			for (int i = 0; i < 8; i++) {
+				if (i != 0)
+					fprintf(fp, ",\n");
+				fprintf(fp, "\t\t%g", shimSetting[i]);
+			}
+			fprintf(fp, "\t],\n");
+		}
+		//DelayTimeInTR
+		// https://groups.google.com/forum/#!topic/bids-discussion/nmg1BOVH1SU
+		// https://groups.google.com/forum/#!topic/bids-discussion/seD7AtJfaFE
+		json_Float(fp, "\t\"DelayTime\": %g,\n", delayTimeInTR/ 1000000.0); //DelayTimeInTR usec -> sec
+		json_Float(fp, "\t\"TxRefAmp\": %g,\n", txRefAmp);
 		json_Float(fp, "\t\"PhaseResolution\": %g,\n", phaseResolution);
 		json_Float(fp, "\t\"PhaseOversampling\": %g,\n", phaseOversampling); //usec -> sec
 		json_Float(fp, "\t\"VendorReportedEchoSpacing\": %g,\n", echoSpacing / 1000000.0); //usec -> sec
@@ -763,6 +831,8 @@ void nii_SaveBIDS(char pathoutname[], struct TDICOMdata d, struct TDCMopts opts,
 		json_Str(fp, "\t\"ReceiveCoilActiveElements\": \"%s\",\n", coilElements);
 		json_Str(fp, "\t\"PulseSequenceDetails\": \"%s\",\n", pulseSequenceDetails);
 		json_Str(fp, "\t\"FmriExternalInfo\": \"%s\",\n", fmriExternalInfo);
+		if (strlen(d.protocolName) < 1)  //insert protocol name if it exists in CSA but not DICOM header: https://github.com/nipy/heudiconv/issues/80
+			json_Str(fp, "\t\"ProtocolName\": \"%s\",\n", protocolName);
 		json_Str(fp, "\t\"ConsistencyInfo\": \"%s\",\n", consistencyInfo);
 		if (parallelReductionFactorInPlane > 0) {//AccelFactorPE -> phase encoding
 			if (d.accelFactPE < 1.0) { //value not found in DICOM header, but WAS found in CSA ascii
@@ -797,7 +867,6 @@ void nii_SaveBIDS(char pathoutname[], struct TDICOMdata d, struct TDCMopts opts,
 			reconMatrixPE = h->dim[1];
     }
 	if (reconMatrixPE > 0) fprintf(fp, "\t\"ReconMatrixPE\": %d,\n", reconMatrixPE );
-
     double bandwidthPerPixelPhaseEncode = d.bandwidthPerPixelPhaseEncode;
     if (bandwidthPerPixelPhaseEncode == 0.0)
     	bandwidthPerPixelPhaseEncode = 	d.CSA.bandwidthPerPixelPhaseEncode;
@@ -839,6 +908,7 @@ void nii_SaveBIDS(char pathoutname[], struct TDICOMdata d, struct TDCMopts opts,
     if ((reconMatrixPE > 0) && (effectiveEchoSpacing > 0.0))
 	  fprintf(fp, "\t\"TotalReadoutTime\": %g,\n", effectiveEchoSpacing * (reconMatrixPE - 1.0));
 
+    json_Float(fp, "\t\"PixelBandwidth\": %g,\n", d.pixelBandwidth );
 	if ((d.manufacturer == kMANUFACTURER_SIEMENS) && (d.dwellTime > 0))
 		fprintf(fp, "\t\"DwellTime\": %g,\n", d.dwellTime * 1E-9);
 	// Phase encoding polarity
@@ -866,14 +936,41 @@ void nii_SaveBIDS(char pathoutname[], struct TDICOMdata d, struct TDCMopts opts,
 	// Slice Timing
 	if (d.CSA.sliceTiming[0] >= 0.0) {
    		fprintf(fp, "\t\"SliceTiming\": [\n");
-   		for (int i = 0; i < kMaxEPI3D; i++) {
-   			if (d.CSA.sliceTiming[i] < 0.0) break;
-			if (i != 0)
-				fprintf(fp, ",\n");
-			fprintf(fp, "\t\t%g", d.CSA.sliceTiming[i] / 1000.0 );
+   		if (d.CSA.protocolSliceNumber1 > 1) {
+   			//https://github.com/rordenlab/dcm2niix/issues/40
+   			//equivalent to dicm2nii "s.SliceTiming = s.SliceTiming(end:-1:1);"
+   			int mx = 0;
+   			for (int i = 0; i < kMaxEPI3D; i++) {
+				if (d.CSA.sliceTiming[i] < 0.0) break;
+				mx++;
+			}
+			mx--;
+			for (int i = mx; i >= 0; i--) {
+				if (d.CSA.sliceTiming[i] < 0.0) break;
+				if (i != mx)
+					fprintf(fp, ",\n");
+				fprintf(fp, "\t\t%g", d.CSA.sliceTiming[i] / 1000.0 );
+			}
+   		} else {
+			for (int i = 0; i < kMaxEPI3D; i++) {
+				if (d.CSA.sliceTiming[i] < 0.0) break;
+				if (i != 0)
+					fprintf(fp, ",\n");
+				fprintf(fp, "\t\t%g", d.CSA.sliceTiming[i] / 1000.0 );
+			}
 		}
 		fprintf(fp, "\t],\n");
 	}
+	//DICOM orientation and phase encoding: useful for 3D undistortion. Original DICOM values: DICOM not NIfTI space, ignores if 3D image re-oriented
+	fprintf(fp, "\t\"ImageOrientationPatientDICOM\": [\n");
+	for (int i = 1; i < 7; i++) {
+		if (i != 1)
+			fprintf(fp, ",\n");
+		fprintf(fp, "\t\t%g", d.orient[i]);
+	}
+	fprintf(fp, "\t],\n");
+	if (d.phaseEncodingRC == 'C') fprintf(fp, "\t\"InPlanePhaseEncodingDirectionDICOM\": \"COL\",\n" );
+	if (d.phaseEncodingRC == 'R') fprintf(fp, "\t\"InPlanePhaseEncodingDirectionDICOM\": \"ROW\",\n" );
 	// Finish up with info on the conversion tool
 	fprintf(fp, "\t\"ConversionSoftware\": \"dcm2niix\",\n");
 	fprintf(fp, "\t\"ConversionSoftwareVersion\": \"%s\"\n", kDCMvers );
@@ -1744,7 +1841,9 @@ int nii_saveNII(char * niiFilename, struct nifti_1_header hdr, unsigned char* im
     		} else
     			printMessage("compression failed %s\n",command);
     	#else //if win else linux
-        system(command);
+        int ret = system(command);
+        if (ret == -1)
+        	printWarning("Failed to execute: %s\n",command);
         #endif //else linux
         printMessage("compress: %s\n",command);
     }
@@ -2182,6 +2281,7 @@ void checkSliceTiming(struct TDICOMdata * d, struct TDICOMdata * d1) {
 		if (d->CSA.sliceTiming[i] > maxT) maxT = d->CSA.sliceTiming[i];
 	}
 	if ((minT != maxT) && (maxT <= d->TR)) return; //looks fine
+	if ((minT == maxT) && (d->is3DAcq)) return; //fine: 3D EPI
 	if ((minT == maxT) && (d->CSA.multiBandFactor == d->CSA.mosaicSlices)) return; //fine: all slices single excitation
 	if ((strlen(d->seriesDescription) > 0) && (strstr(d->seriesDescription, "SBRef") != NULL))  return; //fine: single-band calibration data, the slice timing WILL exceed the TR
 	//check if 2nd image has valud slice timing
@@ -2355,11 +2455,13 @@ int saveDcm2Nii(int nConvert, struct TDCMsort dcmSort[],struct TDICOMdata dcmLis
         free(imgM);
         return EXIT_FAILURE;
     }
+    checkSliceTiming(&dcmList[indx0], &dcmList[indx1]);
     int sliceDir = 0;
     if (hdr0.dim[3] > 1)sliceDir = headerDcm2Nii2(dcmList[dcmSort[0].indx],dcmList[dcmSort[nConvert-1].indx] , &hdr0, true);
 	//UNCOMMENT NEXT TWO LINES TO RE-ORDER MOSAIC WHERE CSA's protocolSliceNumber does not start with 1
 	if (dcmList[dcmSort[0].indx].CSA.protocolSliceNumber1 > 1) {
-		printWarning("Weird CSA 'ProtocolSliceNumber' (%d): SPATIAL, SLICE-ORDER AND DTI TRANSFORMS UNTESTED\n", dcmList[dcmSort[0].indx].CSA.protocolSliceNumber1);
+		printWarning("Weird CSA 'ProtocolSliceNumber' (System/Miscellaneous/ImageNumbering reversed): VALIDATE SLICETIMING AND BVECS\n");
+		//https://www.healthcare.siemens.com/siemens_hwem-hwem_ssxa_websites-context-root/wcm/idc/groups/public/@global/@imaging/@mri/documents/download/mdaz/nzmy/~edisp/mri_60_graessner-01646277.pdf
 		//see https://github.com/neurolabusc/dcm2niix/issues/40
 		sliceDir = -1; //not sure how to handle negative determinants?
 	}
@@ -2367,7 +2469,7 @@ int saveDcm2Nii(int nConvert, struct TDCMsort dcmSort[],struct TDICOMdata dcmLis
         imgM = nii_flipZ(imgM, &hdr0);
         sliceDir = abs(sliceDir); //change this, we have flipped the image so GE DTI bvecs no longer need to be flipped!
     }
-    checkSliceTiming(&dcmList[indx0], &dcmList[indx1]);
+    //move before headerDcm2Nii2 checkSliceTiming(&dcmList[indx0], &dcmList[indx1]);
     //nii_SaveBIDS(pathoutname, dcmList[dcmSort[0].indx], opts, dti4D, &hdr0, nameList->str[dcmSort[0].indx]);
     nii_SaveBIDS(pathoutname, dcmList[dcmSort[0].indx], opts, &hdr0, nameList->str[dcmSort[0].indx]);
     if (opts.isOnlyBIDS) {

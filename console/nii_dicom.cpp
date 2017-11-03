@@ -624,6 +624,11 @@ int headerDcm2Nii2(struct TDICOMdata d, struct TDICOMdata d2, struct nifti_1_hea
         h->dim_info = (3 << 4) + (1 << 2) + 2;
     if (d.phaseEncodingRC =='C')
         h->dim_info = (3 << 4) + (2 << 2) + 1;
+    if (d.CSA.multiBandFactor > 1) {
+        char dtxt[1024] = {""};
+        sprintf(dtxt, ";mb=%d", d.CSA.multiBandFactor);
+        strcat(txt,dtxt);
+    }
     snprintf(h->descrip,80, "%s",txt);
     if (strlen(d.imageComments) > 0)
         snprintf(h->aux_file,24,"%s",d.imageComments);
@@ -670,6 +675,7 @@ struct TDICOMdata clear_dicom_data() {
     strcpy(d.scanningSequence, "");
     strcpy(d.sequenceVariant, "");
     strcpy(d.manufacturersModelName, "");
+    strcpy(d.institutionalDepartmentName, "");
     strcpy(d.procedureStepDescription, "");
     strcpy(d.institutionName, "");
     strcpy(d.referringPhysicianName, "");
@@ -678,6 +684,7 @@ struct TDICOMdata clear_dicom_data() {
     strcpy(d.softwareVersions, "");
     strcpy(d.stationName, "");
     strcpy(d.scanOptions, "");
+    //strcpy(d.mrAcquisitionType, "");
     strcpy(d.seriesInstanceUID, "");
     strcpy(d.studyID, "");
     strcpy(d.studyInstanceUID, "");
@@ -699,6 +706,10 @@ struct TDICOMdata clear_dicom_data() {
     d.flipAngle = 0.0;
     d.bandwidthPerPixelPhaseEncode = 0.0;
     d.fieldStrength = 0.0;
+    d.SAR = 0.0;
+    d.pixelBandwidth = 0.0;
+    d.zSpacing = 0.0;
+    d.zThick = 0.0;
     d.numberOfDynamicScans = 0;
     d.echoNum = 1;
     d.echoTrainLength = 0;
@@ -724,6 +735,7 @@ struct TDICOMdata clear_dicom_data() {
     d.imageNum = 1;
     d.imageStart = 0;
     d.is3DAcq = false; //e.g. MP-RAGE, SPACE, TFE
+    d.is2DAcq = false; //
     d.isSlicesSpatiallySequentialPhilips = true; //Philips can save slices in random order, e.g. 4,5,6,1,2,3
     d.isDerived = false; //0008,0008 = DERIVED,CSAPARALLEL,POSDISP
     d.isSegamiOasis = false; //these images do not store spatial coordinates
@@ -741,6 +753,10 @@ struct TDICOMdata clear_dicom_data() {
     d.isLittleEndian = true; //DICOM initially always little endian
     d.converted2NII = 0;
     d.phaseEncodingRC = '?';
+    d.patientSex = '?';
+    d.patientWeight = 0.0;
+    strcpy(d.patientBirthDate, "");
+    strcpy(d.patientAge, "");
     d.CSA.bandwidthPerPixelPhaseEncode = 0.0;
     d.CSA.mosaicSlices = 0;
     d.CSA.sliceNormV[1] = 1.0;
@@ -1142,6 +1158,7 @@ int readCSAImageHeader(unsigned char *buff, int lLength, struct TCSAdata *CSA, i
             }
         } //if at least 1 item
     }// for lT 1..lnTag
+    if (CSA->protocolSliceNumber1 > 1) CSA->sliceOrder = NIFTI_SLICE_UNKNOWN;
     return EXIT_SUCCESS;
 } // readCSAImageHeader()
 
@@ -1956,7 +1973,7 @@ unsigned char * nii_loadImgCore(char* imgname, struct nifti_1_header hdr, int bi
 	if (bitsAllocated == 12)
 	 conv12bit16bit(bImg, hdr);
     return bImg;
-} //nii_loadImg()
+} //nii_loadImgCore()
 
 unsigned char * nii_planar2rgb(unsigned char* bImg, struct nifti_1_header *hdr, int isPlanar) {
 	//DICOM data saved in triples RGBRGBRGB, NIfTI RGB saved in planes RRR..RGGG..GBBBB..B
@@ -2573,15 +2590,13 @@ unsigned char * nii_loadImgXL(char* imgname, struct nifti_1_header *hdr, struct 
         if ((dcm.compressionScheme == kCompressYes) && (compressFlag != kCompressNone) )
             img = nii_loadImgCoreJasper(imgname, *hdr, dcm, compressFlag);
         else
-        #else
-        UNUSED(compressFlag); //avoid compiler -Wunused-parameter warning: compressFlag required when  myEnableJasper or not myDisableOpenJPEG
-        #endif
+       #endif
     #endif
-    if (dcm.compressionScheme == kCompressYes) {
+     if (dcm.compressionScheme == kCompressYes) {
         printMessage("Software not set up to decompress DICOM\n");
         return NULL;
     } else
-        img = nii_loadImgCore(imgname, *hdr, dcm.bitsAllocated);
+    	img = nii_loadImgCore(imgname, *hdr, dcm.bitsAllocated);
     if (img == NULL) return img;
     if ((dcm.compressionScheme == kCompressNone) && (dcm.isLittleEndian != littleEndianPlatform()) && (hdr->bitpix > 8))
         img = nii_byteswap(img, hdr);
@@ -2717,11 +2732,16 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
 #define  kReferringPhysicianName 0x0008+(0x0090 << 16 )
 #define  kStationName 0x0008+(0x1010 << 16 )
 #define  kSeriesDescription 0x0008+(0x103E << 16 ) // '0008' '103E' 'LO' 'SeriesDescription'
+#define  kInstitutionalDepartmentName  0x0008+(0x1040 << 16 )
 #define  kManufacturersModelName 0x0008+(0x1090 << 16 )
 #define  kDerivationDescription 0x0008+(0x2111 << 16 )
 #define  kComplexImageComponent (uint32_t) 0x0008+(0x9208 << 16 )//'0008' '9208' 'CS' 'ComplexImageComponent'
 #define  kPatientName 0x0010+(0x0010 << 16 )
 #define  kPatientID 0x0010+(0x0020 << 16 )
+#define  kPatientBirthDate 0x0010+(0x0030 << 16 )
+#define  kPatientSex 0x0010+(0x0040 << 16 )
+#define  kPatientAge 0x0010+(0x1010 << 16 )
+#define  kPatientWeight 0x0010+(0x1030 << 16 )
 #define  kAnatomicalOrientationType 0x0010+(0x2210 << 16 )
 #define  kBodyPartExamined 0x0018+(0x0015 << 16)
 #define  kScanningSequence 0x0018+(0x0020 << 16)
@@ -2739,6 +2759,7 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
 #define  kPhaseEncodingSteps  0x0018+(0x0089 << 16 ) //'IS'
 #define  kEchoTrainLength  0x0018+(0x0091 << 16 ) //IS
 #define  kPhaseFieldofView  0x0018+(0x0094 << 16 ) //'DS'
+#define  kPixelBandwidth  0x0018+(0x0095 << 16 ) //'DS' 'PixelBandwidth'
 #define  kDeviceSerialNumber  0x0018+(0x1000 << 16 ) //LO
 #define  kSoftwareVersions  0x0018+(0x1020 << 16 ) //LO
 #define  kProtocolName  0x0018+(0x1030<< 16 )
@@ -2750,6 +2771,7 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
 #define  kAcquisitionMatrix  0x0018+(0x1310  << 16 ) //US
 #define  kFlipAngle  0x0018+(0x1314  << 16 )
 #define  kInPlanePhaseEncodingDirection  0x0018+(0x1312<< 16 ) //CS
+#define  kSAR  0x0018+(0x1316 << 16 ) //'DS' 'SAR'
 #define  kPatientOrient  0x0018+(0x5100<< 16 )    //0018,5100. patient orientation - 'HFS'
 //#define  kDiffusionBFactorSiemens  0x0019+(0x100C<< 16 ) //   0019;000C;SIEMENS MR HEADER  ;B_value
 #define  kDwellTime  0x0019+(0x1018<< 16 ) //IS in NSec, see https://github.com/rordenlab/dcm2niix/issues/127
@@ -2826,7 +2848,7 @@ uint32_t kNest = 0xFFFE +(0xE000 << 16 ); //#define kNest 0xFFFE +(0xE000 << 16 
 uint32_t kUnnest = 0xFFFE +(0xE00D << 16 ); //#define  kUnnest  0xFFFE +(0xE00D << 16 ) //ItemDelimitationItem [length defined] http://www.dabsoft.ch/dicom/5/7.5/
 uint32_t kUnnest2 = 0xFFFE +(0xE0DD << 16 ); //#define  kUnnest2 0xFFFE +(0xE0DD << 16 )//SequenceDelimitationItem [length undefined]
     int nest = 0;
-    double zSpacing = -1.0l; //includes slice thickness plus gap
+    //double zSpacing = -1.0l; //includes slice thickness plus gap
     int locationsInAcquisitionGE = 0;
     int locationsInAcquisitionPhilips = 0;
     int imagesInAcquisition = 0;
@@ -2843,6 +2865,7 @@ uint32_t kUnnest2 = 0xFFFE +(0xE0DD << 16 ); //#define  kUnnest2 0xFFFE +(0xE0DD
     //float intenScalePhilips = 0.0;
     char acquisitionDateTimeTxt[kDICOMStr] = "";
     bool isEncapsulatedData = false;
+    int multiBandFactor = 0;
     int encapsulatedDataFragments = 0;
     int encapsulatedDataFragmentStart = 0; //position of first FFFE,E000 for compressed images
     int encapsulatedDataImageStart = 0; //position of 7FE0,0010 for compressed images (where actual image start should be start of first fragment)
@@ -3096,12 +3119,27 @@ uint32_t kUnnest2 = 0xFFFE +(0xE0DD << 16 ); //#define  kUnnest2 0xFFFE +(0xE0DD
             case kPatientID :
                 dcmStr (lLength, &buffer[lPos], d.patientID);
                 break;
+            case kPatientBirthDate :
+              	dcmStr (lLength, &buffer[lPos], d.patientBirthDate);
+              	break;
+            case kPatientSex :
+            	d.patientSex = toupper(buffer[lPos]); //first character is either 'R'ow or 'C'ol
+                break;
+            case kPatientAge :
+                dcmStr (lLength, &buffer[lPos], d.patientAge);
+                break;
+        	case kPatientWeight :
+                d.patientWeight = dcmStrFloat(lLength, &buffer[lPos]);
+                break;
             case kStationName :
                 dcmStr (lLength, &buffer[lPos], d.stationName);
                 break;
             case kSeriesDescription: {
                 dcmStr (lLength, &buffer[lPos], d.seriesDescription);
                 break; }
+            case kInstitutionalDepartmentName:
+            	dcmStr (lLength, &buffer[lPos], d.institutionalDepartmentName);
+            	break;
             case kManufacturersModelName :
             	dcmStr (lLength, &buffer[lPos], d.manufacturersModelName);
             	break;
@@ -3192,6 +3230,9 @@ uint32_t kUnnest2 = 0xFFFE +(0xE0DD << 16 ); //#define  kUnnest2 0xFFFE +(0xE0DD
             case kInPlanePhaseEncodingDirection:
                 d.phaseEncodingRC = toupper(buffer[lPos]); //first character is either 'R'ow or 'C'ol
                 break;
+            case kSAR:
+            	d.SAR = dcmStrFloat(lLength, &buffer[lPos]);
+            	break;
             case kStudyID:
             	dcmStr (lLength, &buffer[lPos], d.studyID);
             	break;
@@ -3264,7 +3305,7 @@ uint32_t kUnnest2 = 0xFFFE +(0xE0DD << 16 ); //#define  kUnnest2 0xFFFE +(0xE0DD
                 d.fieldStrength =  dcmStrFloat(lLength, &buffer[lPos]);
                 break;
             case kZSpacing :
-                zSpacing = dcmStrFloat(lLength, &buffer[lPos]);
+                d.zSpacing = dcmStrFloat(lLength, &buffer[lPos]);
                 break;
             case kPhaseEncodingSteps :
                 d.phaseEncodingSteps =  dcmStrInt(lLength, &buffer[lPos]);
@@ -3275,6 +3316,9 @@ uint32_t kUnnest2 = 0xFFFE +(0xE0DD << 16 ); //#define  kUnnest2 0xFFFE +(0xE0DD
             case kPhaseFieldofView :
             	d.phaseFieldofView = dcmStrFloat(lLength, &buffer[lPos]);
                 break;
+            case kPixelBandwidth :
+            	d.pixelBandwidth = dcmStrFloat(lLength, &buffer[lPos]);
+            	break;
         	case kAcquisitionMatrix :
 				if (lLength == 8) {
                 	uint16_t acquisitionMatrix[4];
@@ -3320,6 +3364,7 @@ uint32_t kUnnest2 = 0xFFFE +(0xE0DD << 16 ); //#define  kUnnest2 0xFFFE +(0xE0DD
                 break;
             case kZThick :
                 d.xyzMM[3] = dcmStrFloat(lLength, &buffer[lPos]);
+                d.zThick = d.xyzMM[3];
                 break;
             case kCoilSiemens : {
                 if (d.manufacturer == kMANUFACTURER_SIEMENS) {
@@ -3342,6 +3387,13 @@ uint32_t kUnnest2 = 0xFFFE +(0xE0DD << 16 ); //#define  kUnnest2 0xFFFE +(0xE0DD
                 d.accelFactPE = (float)strtof(accelStr, &ptr);
                 if (*ptr != '\0')
                 	d.accelFactPE = 0.0;
+                //between slice accel
+                dcmStr (lLength, &buffer[lPos], accelStr);
+                dcmStrDigitsOnlyKey('s', accelStr); //e.g. if "p2s4" return "4", if "p2" return ""
+                multiBandFactor = (int)strtol(accelStr, &ptr, 10);
+                if (*ptr != '\0')
+                	multiBandFactor = 0.0;
+                //printMessage("p%gs%d\n",  d.accelFactPE, multiBandFactor);
 				break; }
             case kLocationsInAcquisition :
                 d.locationsInAcquisition = dcmInt(lLength,&buffer[lPos],d.isLittleEndian);
@@ -3358,9 +3410,9 @@ uint32_t kUnnest2 = 0xFFFE +(0xE0DD << 16 ); //#define  kUnnest2 0xFFFE +(0xE0DD
                 d.numberOfDynamicScans =  dcmStrInt(lLength, &buffer[lPos]);
                 break;
             case	kMRAcquisitionType: //detect 3D acquisition: we can reorient these without worrying about slice time correct or BVEC/BVAL orientation
-            	#ifndef myDisableReorient3dToOrtho
+            	if (lLength > 1) d.is2DAcq = (buffer[lPos]=='2') && (toupper(buffer[lPos+1]) == 'D');
                 if (lLength > 1) d.is3DAcq = (buffer[lPos]=='3') && (toupper(buffer[lPos+1]) == 'D');
-                #endif
+                //dcmStr (lLength, &buffer[lPos], d.mrAcquisitionType);
                 break;
             case kBodyPartExamined : {
                 dcmStr (lLength, &buffer[lPos], d.bodyPartExamined);
@@ -3637,8 +3689,8 @@ uint32_t kUnnest2 = 0xFFFE +(0xE0DD << 16 ); //#define  kUnnest2 0xFFFE +(0xE0DD
         d.locationsInAcquisition = imagesInAcquisition; //e.g. if 72 slices acquired but interpolated as 144
     if ((d.manufacturer == kMANUFACTURER_GE) && (d.locationsInAcquisition == 0))
         d.locationsInAcquisition = locationsInAcquisitionGE;
-    if (zSpacing > 0)
-    	d.xyzMM[3] = zSpacing; //use zSpacing if provided: depending on vendor, kZThick may or may not include a slice gap
+    if (d.zSpacing > 0)
+    	d.xyzMM[3] = d.zSpacing; //use zSpacing if provided: depending on vendor, kZThick may or may not include a slice gap
     //printMessage("patientPositions = %d XYZT = %d slicePerVol = %d numberOfDynamicScans %d\n",patientPositionNum,d.xyzDim[3], d.locationsInAcquisition, d.numberOfDynamicScans);
     if ((d.manufacturer == kMANUFACTURER_PHILIPS) && (patientPositionNum > d.xyzDim[3]))
         printMessage("Please check slice thicknesses: Philips R3.2.2 bug can disrupt estimation (%d positions reported for %d slices)\n",patientPositionNum, d.xyzDim[3]); //Philips reported different positions for each slice!
@@ -3717,6 +3769,8 @@ uint32_t kUnnest2 = 0xFFFE +(0xE0DD << 16 ); //#define  kUnnest2 0xFFFE +(0xE0DD
         printError("Unable to convert DTI [recompile with increased kMaxDTI4D] detected=%d, max = %d\n", d.CSA.numDti, kMaxDTI4D);
         d.CSA.numDti = 0;
     }
+    if (multiBandFactor > d.CSA.multiBandFactor)
+    	d.CSA.multiBandFactor = multiBandFactor; //SMS reported in 0051,1011 but not CSA header
     //d.isValid = false; //debug only - will not create output!
     #ifndef myLoadWholeFileToReadHeader
 	fclose(file);
