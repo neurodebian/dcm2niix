@@ -1,3 +1,11 @@
+dcm2niix (1:1.0.20171017+git3-g9ccc4c0-1) neurodebian; urgency=medium
+
+  * Fresh upstream snapshot
+    - should bettersupport exporting sidecar information in multiband
+      sequences
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Fri, 03 Nov 2017 11:06:24 -0400
+
 dcm2niix (1:1.0.20170923+git2-gb68d409-1) neurodebian; urgency=medium
 
   * New upstream release with post release fixes/workarounds
