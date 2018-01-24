@@ -74,26 +74,31 @@ void showHelp(const char * argv[], struct TDCMopts opts) {
     printf("  -1..-9 : gz compression level (1=fastest..9=smallest, default %d)\n", opts.gzLevel);
     char bidsCh = 'n';
     if (opts.isCreateBIDS) bidsCh = 'y';
-    printf("  -b : BIDS sidecar (y/n/o(o=only: no NIfTI), default %c)\n", bidsCh);
+    printf("  -b : BIDS sidecar (y/n/o [o=only: no NIfTI], default %c)\n", bidsCh);
     if (opts.isAnonymizeBIDS) bidsCh = 'y'; else bidsCh = 'n';
     printf("   -ba : anonymize BIDS (y/n, default %c)\n", bidsCh);
     printf("  -c : comment stored as NIfTI aux_file (up to 24 characters)\n");
     if (opts.isSortDTIbyBVal) bidsCh = 'y'; else bidsCh = 'n';
-    printf("  -d : diffusion volumes sorted by b-value (y/n, default %c)\n", bidsCh);
+    //printf("  -d : diffusion volumes sorted by b-value (y/n, default %c)\n", bidsCh);
     #ifdef mySegmentByAcq
      #define kQstr " %%q=sequence number,"
     #else
      #define kQstr ""
     #endif
     printf("  -f : filename (%%a=antenna  (coil) number, %%c=comments, %%d=description, %%e echo number, %%f=folder name, %%i ID of patient, %%j seriesInstanceUID, %%k studyInstanceUID, %%m=manufacturer, %%n=name of patient, %%p=protocol,%s %%s=series number, %%t=time, %%u=acquisition number, %%v=vendor, %%x=study ID; %%z sequence name; default '%s')\n", kQstr, opts.filename);
+    printf("  -g : generate defaults file (y/n/o [o=only: reset and write defaults], default n)\n");
     printf("  -h : show help\n");
     printf("  -i : ignore derived, localizer and 2D images (y/n, default n)\n");
     printf("  -m : merge 2D slices from same series regardless of study time, echo, coil, orientation, etc. (y/n, default n)\n");
+    printf("  -n : only convert this series number - can be used up to %i times (default convert all)\n", MAX_NUM_SERIES);
     printf("  -o : output directory (omit to save to input folder)\n");
     printf("  -p : Philips precise float (not display) scaling (y/n, default y)\n");
     printf("  -s : single file mode, do not convert other images in folder (y/n, default n)\n");
     printf("  -t : text notes includes private patient details (y/n, default n)\n");
-    printf("  -v : verbose (n/y or 0/1/2 [no, yes, logorrheic], default 0)\n");
+    #if !defined(_WIN64) && !defined(_WIN32) //shell script for Unix only
+	printf("  -u : up-to-date check\n");
+	#endif
+	printf("  -v : verbose (n/y or 0/1/2 [no, yes, logorrheic], default 0)\n");
     printf("  -x : crop (y/n, default n)\n");
     char gzCh = 'n';
     if (opts.isGz) gzCh = 'y';
@@ -145,10 +150,59 @@ int invalidParam(int i, const char * argv[]) {
 	return 1;
 }
 
+#if !defined(_WIN64) && !defined(_WIN32) //shell script for Unix only
+
+int checkUpToDate() {
+	#define URL "/rordenlab/dcm2niix/releases/"
+	#define APIURL "\"https://api.github.com/repos" URL "latest\""
+	#define HTMURL "https://github.com" URL
+	#define SHELLSCRIPT "#!/usr/bin/env bash\n curl --silent " APIURL " | grep '\"tag_name\":' | sed -E 's/.*\"([^\"]+)\".*/\\1/'"
+	//check first 13 characters, e.g. "v1.0.20171204"
+	#define versionChars 13
+    FILE *pipe = popen(SHELLSCRIPT, "r");
+    char ch, gitvers[versionChars+1];
+    int n = 0;
+    int nMatch = 0;
+    while ((ch = fgetc(pipe)) != EOF) {
+    	if (n < versionChars) {
+    		gitvers[n] = ch;
+    		if (gitvers[n] == kDCMvers[n])
+    			nMatch ++;
+        	n ++;
+    	}
+    }
+    pclose(pipe);
+	gitvers[n] = 0; //null terminate
+    if (n < 1) { //script reported nothing
+    	printf("Error: unable to check version with script:\n %s\n", SHELLSCRIPT);
+    	return 3; //different from EXIT_SUCCESS (0) and EXIT_FAILURE (1)
+    }
+    if (nMatch == versionChars) { //versions match
+    	printf("Good news: Your version is up to date: %s\n", gitvers);
+    	return EXIT_SUCCESS;
+    }
+	//report error
+	char myvers[versionChars+1];
+    for (int i = 0; i < versionChars; i++) myvers[i] = kDCMvers[i];
+    myvers[versionChars] = 0; //null terminate
+    int myv = atoi(myvers + 5); //skip "v1.0."
+	int gitv = atoi(gitvers + 5); //skip "v1.0."
+	if (myv > gitv) {
+		printf("Warning: your version ('%s') more recent than stable release ('%s')\n %s\n", myvers, gitvers, HTMURL);
+		return 2; //different from EXIT_SUCCESS (0) and EXIT_FAILURE (1)
+	}
+	printf("Error: your version ('%s') is not the latest release ('%s')\n %s\n", myvers, gitvers, HTMURL);
+	return EXIT_FAILURE;
+} //checkUpToDate()
+
+#endif //shell script for UNIX only
+
 //#define mydebugtest
 int main(int argc, const char * argv[])
 {
     struct TDCMopts opts;
+    bool isSaveIni = false;
+    bool isResetDefaults = false;
     readIniFile(&opts, argv); //set default preferences
 #ifdef mydebugtest
     //strcpy(opts.indir, "/Users/rorden/desktop/sliceOrder/dicom2/Philips_PARREC_Rotation/NoRotation/DBIEX_4_1.PAR");
@@ -206,8 +260,25 @@ int main(int argc, const char * argv[])
                 if (invalidParam(i, argv)) return 0;
                 if ((argv[i][0] == 'n') || (argv[i][0] == 'N')  || (argv[i][0] == '0'))
                     opts.isSortDTIbyBVal = false;
-                else
+                else {
                     opts.isSortDTIbyBVal = true;
+                    printf("Warning: sorting by b-value is deprecated: do not do this before undistortion.");
+                    printf(" https://www.nitrc.org/forum/message.php?msg_id=22867");
+                }
+            } else if ((argv[i][1] == 'g') && ((i+1) < argc)) {
+                i++;
+                if (invalidParam(i, argv)) return 0;
+                if ((argv[i][0] == 'y') || (argv[i][0] == 'Y'))
+                    isSaveIni = true;
+                if (((argv[i][0] == 'o') || (argv[i][0] == 'O')) && (!isResetDefaults)) {
+                	//reset defaults - do not read, but do write defaults
+                    isSaveIni = true;
+                    isResetDefaults = true;
+                    printf("Defaults reset\n");
+                    setDefaultOpts(&opts, argv);
+                    //this next line is optional, otherwise "dcm2niix -f %p_%s -d o" and "dcm2niix -d o -f %p_%s" will create different results
+                    i = 0; //re-read all settings for this pass, e.g. "dcm2niix -f %p_%s -d o" should save filename as "%p_%s"
+                }
             } else if ((argv[i][1] == 'i') && ((i+1) < argc)) {
                 i++;
                 if (invalidParam(i, argv)) return 0;
@@ -244,6 +315,10 @@ int main(int argc, const char * argv[])
                     opts.isCreateText = false;
                 else
                     opts.isCreateText = true;
+    		#if !defined(_WIN64) && !defined(_WIN32) //shell script for Unix only
+            } else if (argv[i][1] == 'u') {
+				return checkUpToDate();
+			#endif
             } else if ((argv[i][1] == 'v') && ((i+1) < argc)) {
                 i++;
                 if (invalidParam(i, argv)) return 0;
@@ -279,12 +354,26 @@ int main(int argc, const char * argv[])
             } else if ((argv[i][1] == 'o') && ((i+1) < argc)) {
                 i++;
                 strcpy(opts.outdir,argv[i]);
+            } else if ((argv[i][1] == 'n') && ((i+1) < argc)) {
+              i++;
+              int seriesNumber = atoi(argv[i]);
+              if (seriesNumber < 0)
+              	opts.numSeries = -1; //report series: convert none
+              else if ((opts.numSeries >= 0) && (opts.numSeries < MAX_NUM_SERIES)) {
+                  opts.seriesNumber[opts.numSeries] = seriesNumber;
+                  opts.numSeries += 1;
+                }
+                else {
+                  printf("Warning: too many series specified, ignoring -n %s\n", argv[i]);
+                }
             } else
              printf(" Error: invalid option '%s %s'\n", argv[i], argv[i+1]);;
             lastCommandArg = i;
         } //if parameter is a command
         i ++; //read next parameter
     } //while parameters to read
+    if (isSaveIni)
+    	saveIniFile(opts);
     //printf("%d %d",argc,lastCommandArg);
     if (argc == (lastCommandArg+1))  { //+1 as array indexed from 0
         //the user did not provide an input filename, report filename structure
@@ -316,6 +405,7 @@ int main(int argc, const char * argv[])
 	#else
 	printf ("Conversion required %f seconds.\n",((float)(clock()-start))/CLOCKS_PER_SEC);
     #endif
-    saveIniFile(opts);
+    //if (isSaveIni) //we now save defaults earlier, in case of early termination.
+    //	saveIniFile(opts);
     return EXIT_SUCCESS;
 }
