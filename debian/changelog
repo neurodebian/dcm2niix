@@ -1,3 +1,9 @@
+dcm2niix (1:1.0.20171215+git29-ga662295-1) neurodebian; urgency=medium
+
+  * New upstream snapshot from v1.0.20171215-29-ga662295 
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Fri, 30 Mar 2018 10:02:16 -0400
+
 dcm2niix (1:1.0.20171215+git8-g82b9210-1) neurodebian; urgency=medium
 
   * Fresh upstream snapshot

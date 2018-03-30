@@ -1,8 +1,6 @@
-diff --git a/console/CMakeLists.txt b/console/CMakeLists.txt
-index 0e386b8..b746827 100644
 --- a/console/CMakeLists.txt
 +++ b/console/CMakeLists.txt
-@@ -122,6 +122,10 @@ if(BATCH_VERSION)
+@@ -148,6 +148,10 @@ if(BATCH_VERSION)
          add_definitions(-DmyDisableOpenJPEG)
      endif()
  
