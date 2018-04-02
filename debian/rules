@@ -25,6 +25,11 @@ override_dh_auto_configure:
 	  -DUSE_SYSTEM_ZLIB:BOOL=ON \
 	  -DBATCH_VERSION:BOOL=ON
 
+override_dh_auto_install:
+	dh_auto_install
+	# Run tests using built/installed dcm2niix
+	cd dcm_qa; PATH=../debian/dcm2niix/usr/bin:$$PATH ./batch.sh
+
 override_dh_clean:
 	dh_clean
 	# remove stuff we don't carry in the upstream tarball

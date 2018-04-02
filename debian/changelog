@@ -1,8 +1,11 @@
-dcm2niix (1:1.0.20171215+git30-g1c019c1-1) neurodebian; urgency=medium
+dcm2niix (1:1.0.20171215+git31-gca911aa-1) neurodebian; urgency=medium
 
-  * New upstream snapshot from v1.0.20171215-30-...
+  * New upstream snapshot from v1.0.20171215-31
+  * debian/
+    - gbp.conf - include git submodules into .orig.tar.gz (dcm_qa)
+    - run tests under dcm_qa using built dcm2niix
 
- -- Yaroslav Halchenko <debian@onerussian.com>  Fri, 30 Mar 2018 14:39:33 -0400
+ -- Yaroslav Halchenko <debian@onerussian.com>  Mon, 02 Apr 2018 19:24:25 -0400
 
 dcm2niix (1:1.0.20171215+git8-g82b9210-1) neurodebian; urgency=medium
 
