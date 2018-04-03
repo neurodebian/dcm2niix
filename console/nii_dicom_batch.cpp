@@ -631,8 +631,9 @@ void siemensCsaAscii(const char * filename,  int csaOffset, int csaLength, float
 } // siemensCsaAscii()
 #endif //myReadAsciiCsa()
 
-#ifndef myDisableZLib //v1.0.20180330 in future myDisableZLib not myDisableMiniZ
- #define myReadGeProtocolBlock
+#ifndef myDisableZLib
+ //Uncomment next line to decode GE Protocol Data Block, for caveats see https://github.com/rordenlab/dcm2niix/issues/163
+ // #define myReadGeProtocolBlock
 #endif
 #ifdef myReadGeProtocolBlock
 int  geProtocolBlock(const char * filename,  int geOffset, int geLength, int isVerbose, int* sliceOrder, int* viewOrder) {
@@ -661,7 +662,7 @@ int  geProtocolBlock(const char * filename,  int geOffset, int geLength, int isV
 	uint8_t  flags = pCmp[3];
 	bool isFNAME = ((flags & 0x08) == 0x08);
 	bool isFCOMMENT = ((flags & 0x10) == 0x10);
-	size_t hdrSz = 10;
+	uint32_t hdrSz = 10;
 	if (isFNAME) {//skip null-terminated string FNAME
 		for (hdrSz = hdrSz; hdrSz < cmpSz; hdrSz++)
 			if (pCmp[hdrSz] == 0) break;
@@ -672,13 +673,13 @@ int  geProtocolBlock(const char * filename,  int geOffset, int geLength, int isV
 			if (pCmp[hdrSz] == 0) break;
 		hdrSz++;
 	}
-	size_t unCmpSz = ((size_t)pCmp[cmpSz-4])+((size_t)pCmp[cmpSz-3] << 8)+((size_t)pCmp[cmpSz-2] << 16)+((size_t)pCmp[cmpSz-1] << 24);
+	uint32_t unCmpSz = ((uint32_t)pCmp[cmpSz-4])+((uint32_t)pCmp[cmpSz-3] << 8)+((uint32_t)pCmp[cmpSz-2] << 16)+((uint32_t)pCmp[cmpSz-1] << 24);
 	//printf(">> %d %d %zu %zu %zu\n", isFNAME, isFCOMMENT, cmpSz, unCmpSz, hdrSz);
 
 	z_stream s;
 	memset (&s, 0, sizeof (z_stream));
 	#ifdef myDisableMiniZ
-		#define MZ_DEFAULT_WINDOW_BITS 15 // Window bits
+    #define MZ_DEFAULT_WINDOW_BITS 15 // Window bits
 	#endif
 	inflateInit2(&s, -MZ_DEFAULT_WINDOW_BITS);
 	uint8_t *pUnCmp = (uint8_t *)malloc((size_t)unCmpSz);
@@ -709,7 +710,7 @@ int  geProtocolBlock(const char * filename,  int geOffset, int geLength, int isV
 	char keyStrVO[] = "VIEWORDER"; //"MATRIXX";
 	*viewOrder  = readKey(keyStrVO, (char *) pUnCmp, unCmpSz);
 	if (isVerbose > 1) {
-		printMessage("GE Protocol Block %s bytes %d compressed, %zu uncompressed @ %d\n", filename, geLength, unCmpSz, geOffset);
+		printMessage("GE Protocol Block %s bytes %d compressed, %d uncompressed @ %d\n", filename, geLength, unCmpSz, geOffset);
 		printMessage(" ViewOrder %d SliceOrder %d\n", *viewOrder, *sliceOrder);
 		printMessage("%s\n", pUnCmp);
 	}
