@@ -21,7 +21,7 @@ override_dh_auto_configure:
 	dh_auto_configure -- \
 	  -DUSE_STATIC_RUNTIME:BOOL=OFF \
 	  -DUSE_SYSTEM_TURBOJPEG:BOOL=ON \
-      -DUSE_OPENJPEG:BOOL=ON \
+      -DUSE_OPENJPEG:BOOL=OFF \
 	  -DUSE_SYSTEM_ZLIB:BOOL=ON \
 	  -DBATCH_VERSION:BOOL=ON
 
