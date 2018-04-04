@@ -23,7 +23,11 @@ override_dh_auto_configure:
 	  -DUSE_SYSTEM_TURBOJPEG:BOOL=ON \
       -DUSE_OPENJPEG:BOOL=OFF \
 	  -DUSE_SYSTEM_ZLIB:BOOL=ON \
-	  -DBATCH_VERSION:BOOL=ON
+	  -DBATCH_VERSION:BOOL=ON \
+      -DCMAKE_C_FLAGS:STRING="-mmmx -msse -msse2 -mfpmath=sse" \
+      -DCMAKE_CXX_FLAGS:STRING="-mmmx -msse -msse2 -mfpmath=sse" \
+      -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON
+
 
 override_dh_auto_install:
 	dh_auto_install
