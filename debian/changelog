@@ -1,6 +1,6 @@
-dcm2niix (1:1.0.20171215+git33-g46ff43a-1) neurodebian; urgency=medium
+dcm2niix (1:1.0.20171215+git34-gb641a58-1) neurodebian; urgency=medium
 
-  * New upstream snapshot from v1.0.20171215-33-g46ff43a
+  * New upstream snapshot
     - addresses some defects/test failures on i386
   * debian/
     - disable openjpeg support - results for JPEG2000 might be inconsistent
@@ -10,7 +10,7 @@ dcm2niix (1:1.0.20171215+git33-g46ff43a-1) neurodebian; urgency=medium
     - set C*_FLAGS to -mmmx -msse -msse2 -mfpmath=sse to guarantee the same
       precision on x86 platforms
 
- -- Yaroslav Halchenko <debian@onerussian.com>  Thu, 05 Apr 2018 08:55:46 -0400
+ -- Yaroslav Halchenko <debian@onerussian.com>  Thu, 05 Apr 2018 09:21:42 -0400
 
 dcm2niix (1:1.0.20171215+git31-gca911aa-1) UNRELEASED; urgency=medium
 
