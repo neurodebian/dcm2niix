@@ -15,7 +15,7 @@ export DH_VERBOSE = 1
 
 DEB_HOST_ARCH=$(shell dpkg-architecture -qDEB_HOST_ARCH)
 # guarantee the same precision on x86 platforms for tests
-ifeq (,$(findstring z$(DEB_HOST_ARCH)z,zamd64z zi386z))
+ifneq (,$(findstring z$(DEB_HOST_ARCH)z,zamd64z zi386z))
     CFLAGS+=-mmmx -msse -msse2 -mfpmath=sse
 endif
 
