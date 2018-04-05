@@ -1,0 +1,9 @@
+--- a/dcm_qa/batch.sh
++++ b/dcm_qa/batch.sh
+@@ -82,5 +82,5 @@ dsstore=${outdir}/.DS_Store
+ #check differences
+ 
+ set -x
+-diff -x '.*' -br "$refdir" "$outdir" -I ConversionSoftwareVersion
++diff -x '.*' -x '*_26.*' -br "$refdir" "$outdir" -I ConversionSoftwareVersion
+ set +x
