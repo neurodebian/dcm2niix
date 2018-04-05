@@ -1,3 +1,4 @@
 up_pass_CFLAGS_superbuild
 nogit4build
 missing_shlibdep
+up_batch_setx
