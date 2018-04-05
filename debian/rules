@@ -13,6 +13,13 @@ gitver = $(shell [ -x /usr/bin/git ] && git describe --tags --match 'v[0-9].[0-9
 
 export DH_VERBOSE = 1
 
+DEB_HOST_ARCH=$(shell dpkg-architecture -qDEB_HOST_ARCH)
+# guarantee the same precision on x86 platforms for tests
+ifeq (,$(findstring z$(DEB_HOST_ARCH)z,zamd64z zi386z))
+    CFLAGS+=-mmmx -msse -msse2 -mfpmath=sse
+endif
+
+
 # one ring to rule them all ...
 %:
 	dh $@ --buildsystem=cmake --builddirectory=build
@@ -24,8 +31,8 @@ override_dh_auto_configure:
       -DUSE_OPENJPEG:BOOL=OFF \
 	  -DUSE_SYSTEM_ZLIB:BOOL=ON \
 	  -DBATCH_VERSION:BOOL=ON \
-      -DCMAKE_C_FLAGS:STRING="-mmmx -msse -msse2 -mfpmath=sse" \
-      -DCMAKE_CXX_FLAGS:STRING="-mmmx -msse -msse2 -mfpmath=sse" \
+      -DCMAKE_C_FLAGS:STRING="${CFLAGS}" \
+      -DCMAKE_CXX_FLAGS:STRING="${CFLAGS}" \
       -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON
 
 
