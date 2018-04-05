@@ -6,8 +6,11 @@ dcm2niix (1:1.0.20171215+git33-g46ff43a-1) neurodebian; urgency=medium
     - disable openjpeg support - results for JPEG2000 might be inconsistent
       and this is a strategy which was recommended by upstream to mitigate
       failing tests etc.
+  * debian/patches/up_pass_CFLAGS_superbuild, debian/rules
+    - set C*_FLAGS to -mmmx -msse -msse2 -mfpmath=sse to guarantee the same
+      precision on x86 platforms
 
- -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 04 Apr 2018 11:01:25 -0400
+ -- Yaroslav Halchenko <debian@onerussian.com>  Thu, 05 Apr 2018 08:55:46 -0400
 
 dcm2niix (1:1.0.20171215+git31-gca911aa-1) UNRELEASED; urgency=medium
 
