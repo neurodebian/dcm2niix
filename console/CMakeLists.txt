@@ -24,11 +24,11 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-dead_strip")
 elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     # using GCC
-    if (${CMAKE_CXX_COMPILER_VERSION} VERSION_GREATER 4.4.7)
-        add_definitions(-Wno-unused-result)    # available since GCC 4.5
+    if(NOT (${CMAKE_CXX_COMPILER_VERSION} VERSION_LESS 4.5.0))
+        add_definitions(-Wno-unused-result)    # available since GCC 4.5.0
     endif()
-    if (${CMAKE_CXX_COMPILER_VERSION} VERSION_GREATER 4.7.4)
-        add_definitions(-fno-diagnostics-show-caret)    # available since GCC 4.8
+    if(NOT (${CMAKE_CXX_COMPILER_VERSION} VERSION_LESS 4.8.0))
+        add_definitions(-fno-diagnostics-show-caret)    # available since GCC 4.8.0
     endif()
 elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
     # using Intel C++
@@ -46,6 +46,7 @@ elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4800")   # 'uint32_t' : forcing value to bool 'true' or 'false'
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4819")   # The file contains a character that cannot be represented in the current code page
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4996")   # 'access': The POSIX name for this item is deprecated
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:8388608")  # set "Stack Reserve Size" to 8MB (default value is 1MB)
 endif()
 
 add_executable(dcm2niix
