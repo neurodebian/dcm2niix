@@ -1,6 +1,6 @@
 --- a/console/CMakeLists.txt
 +++ b/console/CMakeLists.txt
-@@ -148,6 +148,10 @@ if(BATCH_VERSION)
+@@ -149,6 +149,10 @@ if(BATCH_VERSION)
          add_definitions(-DmyDisableOpenJPEG)
      endif()
  
