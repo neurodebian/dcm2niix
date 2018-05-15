@@ -1036,6 +1036,15 @@ void nii_SaveBIDS(char pathoutname[], struct TDICOMdata d, struct TDCMopts opts,
 	int phPos = d.CSA.phaseEncodingDirectionPositive;
 	if (viewOrderGE > -1)
 		phPos = viewOrderGE;
+	if (((d.phaseEncodingRC == 'R') || (d.phaseEncodingRC == 'C')) &&  (!d.is3DAcq) && (phPos < 0)) {
+		//when phase encoding axis is known but we do not know phase encoding polarity
+		// https://github.com/rordenlab/dcm2niix/issues/163
+		// This will typically correspond with InPlanePhaseEncodingDirectionDICOM
+		if (d.phaseEncodingRC == 'C') //Values should be "R"ow, "C"olumn or "?"Unknown
+			fprintf(fp, "\t\"PhaseEncodingAxis\": \"j\",\n");
+		else if (d.phaseEncodingRC == 'R')
+				fprintf(fp, "\t\"PhaseEncodingAxis\": \"i\",\n");
+	}
 	if (((d.phaseEncodingRC == 'R') || (d.phaseEncodingRC == 'C')) &&  (!d.is3DAcq) && (phPos >= 0)) {
 		if (d.phaseEncodingRC == 'C') //Values should be "R"ow, "C"olumn or "?"Unknown
 			fprintf(fp, "\t\"PhaseEncodingDirection\": \"j");
@@ -1209,6 +1218,13 @@ int cmp_bvals(const void *a, const void *b){
     return bvals[ia] < bvals[ib] ? -1 : bvals[ia] > bvals[ib];
 } // cmp_bvals()
 
+bool isAllZeroFloat(float v1, float v2, float v3) {
+	if (!isSameFloatGE(v1, 0.0)) return false;
+	if (!isSameFloatGE(v2, 0.0)) return false;
+	if (!isSameFloatGE(v3, 0.0)) return false;
+	return true;
+}
+
 int * nii_SaveDTI(char pathoutname[],int nConvert, struct TDCMsort dcmSort[],struct TDICOMdata dcmList[], struct TDCMopts opts, int sliceDir, struct TDTI4D *dti4D, int * numADC) {
     //reports non-zero if any volumes should be excluded (e.g. philip stores an ADC maps)
     //to do: works with 3D mosaics and 4D files, must remove repeated volumes for 2D sequences....
@@ -1251,11 +1267,24 @@ int * nii_SaveDTI(char pathoutname[],int nConvert, struct TDCMsort dcmSort[],str
 			free(vx);
 			return NULL;
         }
-        for (int i = 1; i < numDti; i++)
+        for (int i = 0; i < numDti; i++)
                 printMessage("bxyz %g %g %g %g\n",vx[i].V[0],vx[i].V[1],vx[i].V[2],vx[i].V[3]);
-        printWarning("No bvec/bval files created. Only one B-value reported for all volumes: %g\n",vx[0].V[0]);
-        free(vx);
-        return NULL;
+        //Stutters XINAPSE7 seem to save B=0 as B=2000, but these are not derived? https://github.com/rordenlab/dcm2niix/issues/182
+        bool bZeroBvec = false;
+        for (int i = 0; i < numDti; i++) {//check if all bvalues match first volume
+            if (isAllZeroFloat(vx[i].V[1], vx[i].V[2], vx[i].V[3])) {
+            	vx[i].V[0] = 0;
+            	//printWarning("volume %d might be B=0\n", i);
+            	bZeroBvec = true;
+            }
+        }
+        if (bZeroBvec)
+        	printWarning("Assuming volumes without gradients are actually B=0\n");
+        else {
+        	printWarning("No bvec/bval files created. Only one B-value reported for all volumes: %g\n",vx[0].V[0]);
+        	free(vx);
+        	return NULL;
+        }
     }
     //report values:
     //for (int i = 1; i < numDti; i++) //check if all bvalues match first volume
@@ -1281,9 +1310,11 @@ int * nii_SaveDTI(char pathoutname[],int nConvert, struct TDCMsort dcmSort[],str
 	bvals = (float *) malloc(numDti * sizeof(float));
 	for (int i = 0; i < numDti; i++) {
 		bvals[i] = vx[i].V[0];
+		//printMessage("---bxyz %g %g %g %g\n",vx[i].V[0],vx[i].V[1],vx[i].V[2],vx[i].V[3]);
 		if (isADCnotDTI(vx[i])) {
             *numADC = *numADC + 1;
             bvals[i] = kADCval;
+            //printMessage("+++bxyz %d\n",i);
         }
         bvals[i] = bvals[i] + (0.5 * i/numDti); //add a small bias so ties are kept in sequential order
 	}
@@ -2457,6 +2488,34 @@ int nii_saveCrop(char * niiFilename, struct nifti_1_header hdr, unsigned char* i
     return returnCode;
 }// nii_saveCrop()
 
+float dicomTimeToSec (float dicomTime) {
+	char acqTimeBuf[64];
+	snprintf(acqTimeBuf, sizeof acqTimeBuf, "%+013.5f", (double)dicomTime);
+	int ahour,amin;
+	double asec;
+	int count = 0;
+	sscanf(acqTimeBuf, "%3d%2d%lf%n", &ahour, &amin, &asec, &count);
+	if (!count) return -1;
+	return  (ahour * 3600)+(amin * 60) + asec;
+}
+
+float acquisitionTimeDifference(struct TDICOMdata * d1, struct TDICOMdata * d2) {
+	if (d1->acquisitionDate != d2->acquisitionDate) return -1; //to do: scans running across midnight
+	float sec1 = dicomTimeToSec(d1->acquisitionTime);
+	float sec2 = dicomTimeToSec(d2->acquisitionTime);
+	//printMessage("%g\n",d2->acquisitionTime);
+	if ((sec1 < 0) || (sec2 < 0)) return -1;
+	return (sec2 - sec1);
+}
+void checkDateTimeOrder(struct TDICOMdata * d, struct TDICOMdata * d1) {
+	if (d->acquisitionDate < d1->acquisitionDate) return; //d1 occurred on later date
+	if (d->acquisitionTime <= d1->acquisitionTime) return; //d1 occurred on later (or same) time
+	if (d->imageNum > d1->imageNum)
+		printWarning("Images not sorted in ascending instance number (0020,0013)\n");
+	else
+		printWarning("Images sorted by instance number  [0020,0013](%d..%d), but AcquisitionTime [0008,0032] suggests a different order (%g..%g) \n", d->imageNum,d1->imageNum, d->acquisitionTime,d1->acquisitionTime);
+}
+
 void checkSliceTiming(struct TDICOMdata * d, struct TDICOMdata * d1) {
 //detect images with slice timing errors. https://github.com/rordenlab/dcm2niix/issues/126
 	if ((d->TR < 0.0) || (d->CSA.sliceTiming[0] < 0.0)) return; //no slice timing
@@ -2561,6 +2620,43 @@ int saveDcm2NiiCore(int nConvert, struct TDCMsort dcmSort[],struct TDICOMdata dc
                     printMessage("Slice positions repeated, but number of slices (%d) not divisible by number of repeats (%d): missing images?\n", nConvert, nAcq);
                 }
             }
+            //next: detect if ANY file flagged as echo vaies
+            for (int i = 0; i < nConvert; i++)
+            	if (dcmList[dcmSort[i].indx].isMultiEcho)
+            		dcmList[indx0].isMultiEcho = true;
+            //next: detect variable inter-volume time https://github.com/rordenlab/dcm2niix/issues/184
+    		if (dcmList[indx0].modality == kMODALITY_PT) {
+				bool trVaries = false;
+				bool dayVaries = false;
+				float tr = -1;
+				uint64_t prevVolIndx = indx0;
+				for (int i = 0; i < nConvert; i++)
+						if (isSamePosition(dcmList[indx0],dcmList[dcmSort[i].indx])) {
+							float trDiff = acquisitionTimeDifference(&dcmList[prevVolIndx], &dcmList[dcmSort[i].indx]);
+							prevVolIndx = dcmSort[i].indx;
+							if (trDiff <= 0) continue;
+							if (tr < 0) tr = trDiff;
+							if (trDiff < 0) dayVaries = true;
+							if (!isSameFloatGE(tr,trDiff))
+								trVaries = true;
+						}
+				if (trVaries) {
+					if (dayVaries)
+						printWarning("Seconds between volumes varies (perhaps run through midnight)\n");
+					else
+						printWarning("Seconds between volumes varies\n");
+					// saveAs3D = true;
+					//  printWarning("Creating independent volumes as time between volumes varies\n");
+					printMessage(" OnsetTime = [");
+					for (int i = 0; i < nConvert; i++)
+							if (isSamePosition(dcmList[indx0],dcmList[dcmSort[i].indx])) {
+								float trDiff = acquisitionTimeDifference(&dcmList[indx0], &dcmList[dcmSort[i].indx]);
+								printMessage(" %g", trDiff);
+							}
+					printMessage(" ]\n");
+				} //if trVaries
+            } //if PET
+            //next: detect variable inter-slice distance
             float dx = intersliceDistance(dcmList[dcmSort[0].indx],dcmList[dcmSort[1].indx]);
             bool dxVaries = false;
             for (int i = 1; i < nConvert; i++)
@@ -2618,8 +2714,13 @@ int saveDcm2NiiCore(int nConvert, struct TDCMsort dcmSort[],struct TDICOMdata dc
         }*/
         //printMessage(" %d %d %d %d %lu\n", hdr0.dim[1], hdr0.dim[2], hdr0.dim[3], hdr0.dim[4], (unsigned long)[imgM length]);
         struct nifti_1_header hdrI;
+        //double time = -1.0;
         for (int i = 1; i < nConvert; i++) { //stack additional images
             indx = dcmSort[i].indx;
+            //double time2 = dcmList[dcmSort[i].indx].acquisitionTime;
+            //if (time != time2)
+            //	printWarning("%g\n", time2);
+            //time = time2;
             //if (headerDcm2Nii(dcmList[indx], &hdrI) == EXIT_FAILURE) return EXIT_FAILURE;
             img = nii_loadImgXL(nameList->str[indx], &hdrI, dcmList[indx],iVaries, opts.compressFlag, opts.isVerbose, dti4D);
             if (img == NULL) return EXIT_FAILURE;
@@ -2632,6 +2733,8 @@ int saveDcm2NiiCore(int nConvert, struct TDCMsort dcmSort[],struct TDICOMdata dc
             memcpy(&imgM[(uint64_t)i*imgsz], &img[0], imgsz);
             free(img);
         }
+        if (hdr0.dim[4] > 1) //for 4d datasets, last volume should be acquired before first
+        	checkDateTimeOrder(&dcmList[dcmSort[0].indx], &dcmList[dcmSort[nConvert-1].indx]);
     }
     if ((segVol >= 0) && (hdr0.dim[4] > 1)) {
     	int inVol = hdr0.dim[4];
@@ -3358,7 +3461,7 @@ int nii_loadDir(struct TDCMopts* opts) {
 			isMultiEcho = false;
 			for (int j = i; j < (int)nDcm; j++)
 				if (isSameSet(dcmList[i], dcmList[j], opts, &warnings, &isMultiEcho)) {
-                                        fillTDCMsort(dcmSort[nConvert], j, dcmList[j]);
+                    fillTDCMsort(dcmSort[nConvert], j, dcmList[j]);
 					nConvert++;
 				} else {
 					dcmList[i].isMultiEcho = isMultiEcho;

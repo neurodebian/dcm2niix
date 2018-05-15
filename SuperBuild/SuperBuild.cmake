@@ -1,7 +1,7 @@
 # Check if git exists
 find_package(Git)
 if(NOT GIT_FOUND)
-    message(ERROR "Cannot find git. git is required for Superbuild")
+    message(FATAL_ERROR "Cannot find Git. Git is required for Superbuild")
 endif()
 
 # Use git protocol or not
@@ -19,6 +19,20 @@ set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS  "Debug;Release;RelWithDebI
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 option(USE_STATIC_RUNTIME "Use static runtime" ON)
+
+if(USE_STATIC_RUNTIME)
+    if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+        find_file(STATIC_LIBCXX "libstdc++.a" ${CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES})
+        mark_as_advanced(STATIC_LIBCXX)
+        if(NOT STATIC_LIBCXX)
+            unset(STATIC_LIBCXX CACHE)
+            # only on some Centos/Redhat systems
+            message(FATAL_ERROR
+                "\"USE_STATIC_RUNTIME\" set to ON but \"libstdcxx.a\" not found! \
+                 \"yum install libstdc++-static\" to resolve the error.")
+        endif()
+    endif()
+endif()
 
 option(USE_SYSTEM_ZLIB "Use the system zlib" OFF)
 option(USE_TURBOJPEG "Use TurboJPEG to decode classic JPEG" OFF)
@@ -97,6 +111,9 @@ ExternalProject_Add(console
         --no-warn-unused-cli
         -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
         -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}
+        -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}
+        -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
+        -DCMAKE_VERBOSE_MAKEFILE=${CMAKE_VERBOSE_MAKEFILE}
         -DUSE_STATIC_RUNTIME:BOOL=${USE_STATIC_RUNTIME}
         -DUSE_SYSTEM_ZLIB:BOOL=${USE_SYSTEM_ZLIB}
         -DUSE_TURBOJPEG:BOOL=${USE_TURBOJPEG}
