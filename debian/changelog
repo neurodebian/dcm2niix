@@ -1,6 +1,8 @@
 dcm2niix (1:1.0.20180404+git118-g3762cc0-1) neurodebian; urgency=medium
 
   * Fresh upstream release
+  * debian/
+    - rules - enable USE_JPEGLS support for JPEG-LS transfer syntax
 
  -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 13 Jun 2018 12:57:38 -0700
 
