@@ -1,7 +1,7 @@
 --- a/console/CMakeLists.txt
 +++ b/console/CMakeLists.txt
-@@ -149,6 +149,10 @@ if(BATCH_VERSION)
-         add_definitions(-DmyDisableOpenJPEG)
+@@ -184,6 +184,10 @@ if(BATCH_VERSION)
+         target_link_libraries(dcm2niibatch ${OPENJPEG_LIBRARIES})
      endif()
  
 +    if(USE_SYSTEM_TURBOJPEG)
