@@ -1,5 +1,7 @@
 version: build-{build}
 
+image: Visual Studio 2015
+
 branches:
   only:
   - master
@@ -32,7 +34,7 @@ before_build:
 
     cd c:\projects\dcm2niix\build
 
-    cmake -Wno-dev -G "Visual Studio 14 2015 Win64" -DBATCH_VERSION=ON -DUSE_OPENJPEG=ON ..\
+    cmake -Wno-dev -G "Visual Studio 14 2015 Win64" -DBATCH_VERSION=ON -DUSE_OPENJPEG=ON -DUSE_JPEGLS=true ..\
 
 build:
   project: c:\projects\dcm2niix\build\dcm2niix.sln

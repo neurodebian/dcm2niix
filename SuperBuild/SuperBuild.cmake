@@ -13,15 +13,17 @@ else()
 endif()
 
 # Basic CMake build settings
-set(CMAKE_BUILD_TYPE "Release" CACHE STRING
-    "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel." FORCE)
-set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS  "Debug;Release;RelWithDebInfo;MinSizeRel")
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING
+        "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel." FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS  "Debug;Release;RelWithDebInfo;MinSizeRel")
+endif()
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 option(USE_STATIC_RUNTIME "Use static runtime" ON)
 
 if(USE_STATIC_RUNTIME)
-    if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    if(${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
         find_file(STATIC_LIBCXX "libstdc++.a" ${CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES})
         mark_as_advanced(STATIC_LIBCXX)
         if(NOT STATIC_LIBCXX)
@@ -34,11 +36,11 @@ if(USE_STATIC_RUNTIME)
     endif()
 endif()
 
-option(USE_SYSTEM_ZLIB "Use the system zlib" OFF)
 option(USE_TURBOJPEG "Use TurboJPEG to decode classic JPEG" OFF)
 option(USE_JASPER "Build with JPEG2000 support using Jasper" OFF)
-
 option(USE_OPENJPEG "Build with JPEG2000 support using OpenJPEG" OFF)
+option(USE_JPEGLS "Build with JPEG-LS support using CharLS" OFF)
+
 option(BATCH_VERSION "Build dcm2niibatch for multiple conversions" OFF)
 
 include(ExternalProject)
@@ -56,8 +58,8 @@ endif()
 if(USE_OPENJPEG)
     message("-- Build with OpenJPEG: ${USE_OPENJPEG}")
 
-    if(OpenJPEG_DIR OR OPENJPEG_DIR)
-        set(OpenJPEG_DIR "${OpenJPEG_DIR}${OPENJPEG_DIR}" CACHE PATH "Path to OpenJPEG configuration file"  FORCE)
+    if(OpenJPEG_DIR)
+        set(OpenJPEG_DIR "${OpenJPEG_DIR}" CACHE PATH "Path to OpenJPEG configuration file"  FORCE)
         message("--     Using OpenJPEG library from ${OpenJPEG_DIR}")
     else()
         find_package(PkgConfig)
@@ -101,6 +103,21 @@ if(BATCH_VERSION)
     endif()
 endif()
 
+set(ZLIB_IMPLEMENTATION "Miniz" CACHE STRING "Choose zlib implementation.")
+set_property(CACHE ZLIB_IMPLEMENTATION PROPERTY STRINGS  "Miniz;System;Cloudflare;Custom")
+if(${ZLIB_IMPLEMENTATION} STREQUAL "Cloudflare")
+    message("-- Build with Cloudflare zlib: ON")
+    include(${CMAKE_SOURCE_DIR}/SuperBuild/External-CLOUDFLARE-ZLIB.cmake)
+    list(APPEND DEPENDENCIES zlib)
+    set(BUILD_CLOUDFLARE-ZLIB TRUE)
+    message("--     Will build Cloudflare zlib from github")
+elseif(${ZLIB_IMPLEMENTATION} STREQUAL "Custom")
+    set(ZLIB_ROOT ${ZLIB_ROOT} CACHE PATH "Specify custom zlib root directory.")
+    if(NOT ZLIB_ROOT)
+        message(FATAL_ERROR "ZLIB_ROOT needs to be set to locate custom zlib!")
+    endif()
+endif()
+
 ExternalProject_Add(console
     DEPENDS ${DEPENDENCIES}
     DOWNLOAD_COMMAND ""
@@ -110,14 +127,16 @@ ExternalProject_Add(console
         -Wno-dev
         --no-warn-unused-cli
         -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
-        -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}
-        -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}
-        -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
-        -DCMAKE_VERBOSE_MAKEFILE=${CMAKE_VERBOSE_MAKEFILE}
+        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_BINARY_DIR}
+        -DCMAKE_C_FLAGS:STRING=${CMAKE_C_FLAGS}
+        -DCMAKE_CXX_FLAGS:STRING=${CMAKE_CXX_FLAGS}
+        -DCMAKE_VERBOSE_MAKEFILE:BOOL=${CMAKE_VERBOSE_MAKEFILE}
         -DUSE_STATIC_RUNTIME:BOOL=${USE_STATIC_RUNTIME}
-        -DUSE_SYSTEM_ZLIB:BOOL=${USE_SYSTEM_ZLIB}
         -DUSE_TURBOJPEG:BOOL=${USE_TURBOJPEG}
         -DUSE_JASPER:BOOL=${USE_JASPER}
+        -DUSE_JPEGLS:BOOL=${USE_JPEGLS}
+        -DZLIB_IMPLEMENTATION:STRING=${ZLIB_IMPLEMENTATION}
+        -DZLIB_ROOT:PATH=${ZLIB_ROOT}
          # OpenJPEG
         -DUSE_OPENJPEG:BOOL=${USE_OPENJPEG}
         -DOpenJPEG_DIR:PATH=${OpenJPEG_DIR}
