@@ -1,8 +1,8 @@
-dcm2niix (1:1.0.20180404-1) neurodebian; urgency=medium
+dcm2niix (1:1.0.20180404+git118-g3762cc0-1) neurodebian; urgency=medium
 
   * Fresh upstream release
 
- -- Yaroslav Halchenko <debian@onerussian.com>  Mon, 14 May 2018 20:56:43 -0400
+ -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 13 Jun 2018 12:57:38 -0700
 
 dcm2niix (1:1.0.20171215+git34-gb641a58-1) neurodebian; urgency=medium
 
