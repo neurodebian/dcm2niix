@@ -19,18 +19,22 @@ ifneq (,$(findstring z$(DEB_HOST_ARCH)z,zamd64z zi386z))
     CFLAGS+=-mmmx -msse -msse2 -mfpmath=sse
 endif
 
+# Not exactly sure on where/when it would build, but we see it fail
+# on jessie with g++ 4:4.9.2-2
+USE_JPEGLS = $(shell dpkg --compare-versions `dpkg -l g++ | awk '/^ii/{print $3;}'` ge 4:4.10 && echo ON || echo OFF)
 
 # one ring to rule them all ...
 %:
 	dh $@ --buildsystem=cmake --builddirectory=build
 
 override_dh_auto_configure:
+	g++ --version  # Just FOI
 	dh_auto_configure -- \
 	  -DUSE_STATIC_RUNTIME:BOOL=OFF \
 	  -DUSE_SYSTEM_TURBOJPEG:BOOL=ON \
       -DUSE_OPENJPEG:BOOL=OFF \
 	  -DUSE_SYSTEM_ZLIB:BOOL=ON \
-	  -DUSE_JPEGLS:BOOL=ON \
+	  -DUSE_JPEGLS:BOOL=$(USE_JPEGLS) \
 	  -DBATCH_VERSION:BOOL=ON \
       -DCMAKE_C_FLAGS:STRING="${CFLAGS}" \
       -DCMAKE_CXX_FLAGS:STRING="${CFLAGS}" \
