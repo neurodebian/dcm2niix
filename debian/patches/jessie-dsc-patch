@@ -10,12 +10,12 @@
  Standards-Version: 3.9.8
 --- a/debian/rules
 +++ b/debian/rules
-@@ -27,7 +27,7 @@ endif
- override_dh_auto_configure:
+@@ -31,7 +31,7 @@ override_dh_auto_configure:
+ 	g++ --version  # Just FOI
  	dh_auto_configure -- \
  	  -DUSE_STATIC_RUNTIME:BOOL=OFF \
 -	  -DUSE_SYSTEM_TURBOJPEG:BOOL=ON \
 +	  -DUSE_SYSTEM_TURBOJPEG:BOOL=OFF \
        -DUSE_OPENJPEG:BOOL=OFF \
  	  -DUSE_SYSTEM_ZLIB:BOOL=ON \
- 	  -DBATCH_VERSION:BOOL=ON \
+ 	  -DUSE_JPEGLS:BOOL=$(USE_JPEGLS) \
