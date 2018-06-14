@@ -2,3 +2,4 @@ nogit4build
 missing_shlibdep
 up_batch_setx
 deb_skip_26test
+deb_usepkgconfig_find_yaml

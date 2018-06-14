@@ -1,0 +1,26 @@
+From: Yaroslav Halchenko <debian@onerussian.com>
+Subject: Use PkgConfig to find yaml-cpp
+
+  Seems to resolve problem finding yaml-cpp on older (~jessie)
+  systems.  Solution was picked up from
+  https://answers.ros.org/question/262502/cmake-cant-find-yaml-cpp-on-debian-jessie/
+
+Origin: NeuroDebian
+Last-Update: 2018-06-14
+
+Index: dcm2niix-1.0.20180404+git118-g3762cc0/console/CMakeLists.txt
+===================================================================
+--- dcm2niix-1.0.20180404+git118-g3762cc0.orig/console/CMakeLists.txt
++++ dcm2niix-1.0.20180404+git118-g3762cc0/console/CMakeLists.txt
+@@ -160,7 +160,10 @@ if(BATCH_VERSION)
+ 
+     set(YAML-CPP_DIR ${YAML-CPP_DIR} CACHE PATH "Path to yaml-cpp configuration file" FORCE)
+ 
+-    find_package(YAML-CPP REQUIRED)
++    # find_package(YAML-CPP REQUIRED)
++    find_package(PkgConfig REQUIRED)
++    pkg_check_modules(YAML_CPP REQUIRED yaml-cpp)
++
+     target_include_directories(dcm2niibatch PRIVATE ${YAML_CPP_INCLUDE_DIR})
+     target_link_libraries(dcm2niibatch ${YAML_CPP_LIBRARIES})
+ 
