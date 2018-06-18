@@ -86,9 +86,12 @@ void showHelp(const char * argv[], struct TDCMopts opts) {
      #define kQstr ""
     #endif
     printf("  -f : filename (%%a=antenna  (coil) number, %%c=comments, %%d=description, %%e=echo number, %%f=folder name, %%i=ID of patient, %%j=seriesInstanceUID, %%k=studyInstanceUID, %%m=manufacturer, %%n=name of patient, %%p=protocol,%s %%s=series number, %%t=time, %%u=acquisition number, %%v=vendor, %%x=study ID; %%z=sequence name; default '%s')\n", kQstr, opts.filename);
-    printf("  -g : generate defaults file (y/n/o [o=only: reset and write defaults], default n)\n");
+    printf("  -g : generate defaults file (y/n/o/i [o=only: reset and write defaults; i=ignore: reset defaults], default n)\n");
     printf("  -h : show help\n");
     printf("  -i : ignore derived, localizer and 2D images (y/n, default n)\n");
+    char max16Ch = 'n';
+    if (opts.isMaximize16BitRange) max16Ch = 'y';
+    printf("  -l : losslessly scale 16-bit integers to use dynamic range (y/n, default %c)\n", max16Ch);
     printf("  -m : merge 2D slices from same series regardless of study time, echo, coil, orientation, etc. (y/n, default n)\n");
     printf("  -n : only convert this series number - can be used up to %i times (default convert all)\n", MAX_NUM_SERIES);
     printf("  -o : output directory (omit to save to input folder)\n");
@@ -268,6 +271,12 @@ int main(int argc, const char * argv[])
                 if (invalidParam(i, argv)) return 0;
                 if ((argv[i][0] == 'y') || (argv[i][0] == 'Y'))
                     isSaveIni = true;
+                if (((argv[i][0] == 'i') || (argv[i][0] == 'I')) && (!isResetDefaults)) {
+                    isResetDefaults = true;
+                    printf("Defaults reset\n");
+                    setDefaultOpts(&opts, argv);
+                    i = 0; //re-read all settings for this pass, e.g. "dcm2niix -f %p_%s -d o" should save filename as "%p_%s"
+                }
                 if (((argv[i][0] == 'o') || (argv[i][0] == 'O')) && (!isResetDefaults)) {
                 	//reset defaults - do not read, but do write defaults
                     isSaveIni = true;
@@ -284,6 +293,13 @@ int main(int argc, const char * argv[])
                     opts.isIgnoreDerivedAnd2D = false;
                 else
                     opts.isIgnoreDerivedAnd2D = true;
+            } else if ((argv[i][1] == 'l') && ((i+1) < argc)) {
+                i++;
+                if (invalidParam(i, argv)) return 0;
+                if ((argv[i][0] == 'n') || (argv[i][0] == 'N')  || (argv[i][0] == '0'))
+                    opts.isMaximize16BitRange = false;
+                else
+                    opts.isMaximize16BitRange = true;
             } else if ((argv[i][1] == 'm') && ((i+1) < argc)) {
                 i++;
                 if (invalidParam(i, argv)) return 0;
