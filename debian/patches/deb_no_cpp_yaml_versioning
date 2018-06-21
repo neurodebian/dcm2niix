@@ -1,0 +1,11 @@
+--- a/SuperBuild/SuperBuild.cmake
++++ b/SuperBuild/SuperBuild.cmake
+@@ -92,7 +92,7 @@ if(BATCH_VERSION)
+         endif()
+ 
+         # Build from github if not found or version < 0.5.3
+-        if(YAML-CPP_FOUND AND NOT (YAML-CPP_VERSION VERSION_LESS "0.5.3"))
++        if(YAML-CPP_FOUND)
+             set(YAML-CPP_DIR ${YAML-CPP_LIBDIR}/cmake/yaml-cpp CACHE PATH "Path to yaml-cpp configuration file"  FORCE)
+             message("--     Using yaml-cpp library from ${YAML-CPP_DIR}")
+         else()
