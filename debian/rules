@@ -23,6 +23,9 @@ endif
 # on jessie with g++ 4:4.9.2-2
 USE_JPEGLS = $(shell dpkg --compare-versions `dpkg -l g++ | awk '/^ii/{print $3;}'` ge 4:4.10 && echo ON || echo OFF)
 
+export  http_proxy=http://127.0.0.1:9/
+export  https_proxy=http://127.0.0.1:9/
+
 # one ring to rule them all ...
 %:
 	dh $@ --buildsystem=cmake --builddirectory=build
