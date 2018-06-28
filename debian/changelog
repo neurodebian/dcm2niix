@@ -1,3 +1,11 @@
+dcm2niix (1:1.0.20180622-1) neurodebian; urgency=medium
+
+  * Fresh upstream bugfix release
+    - addresses a bug with a small subset of Philips Enhanced DICOM
+      DTI datasets
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 27 Jun 2018 22:17:55 -0400
+
 dcm2niix (1:1.0.20180614-1) neurodebian; urgency=medium
 
   * Fresh upstream release
