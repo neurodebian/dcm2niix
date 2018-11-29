@@ -85,7 +85,7 @@ void showHelp(const char * argv[], struct TDCMopts opts) {
     #else
      #define kQstr ""
     #endif
-    printf("  -f : filename (%%a=antenna  (coil) number, %%c=comments, %%d=description, %%e=echo number, %%f=folder name, %%i=ID of patient, %%j=seriesInstanceUID, %%k=studyInstanceUID, %%m=manufacturer, %%n=name of patient, %%p=protocol,%s %%s=series number, %%t=time, %%u=acquisition number, %%v=vendor, %%x=study ID; %%z=sequence name; default '%s')\n", kQstr, opts.filename);
+    printf("  -f : filename (%%a=antenna  (coil) name, %%b=basename, %%c=comments, %%d=description, %%e=echo number, %%f=folder name, %%i=ID of patient, %%j=seriesInstanceUID, %%k=studyInstanceUID, %%m=manufacturer, %%n=name of patient, %%p=protocol,%s %%r=instance number, %%s=series number, %%t=time, %%u=acquisition number, %%v=vendor, %%x=study ID; %%z=sequence name; default '%s')\n", kQstr, opts.filename);
     printf("  -g : generate defaults file (y/n/o/i [o=only: reset and write defaults; i=ignore: reset defaults], default n)\n");
     printf("  -h : show help\n");
     printf("  -i : ignore derived, localizer and 2D images (y/n, default n)\n");
@@ -96,6 +96,7 @@ void showHelp(const char * argv[], struct TDCMopts opts) {
     printf("  -n : only convert this series number - can be used up to %i times (default convert all)\n", MAX_NUM_SERIES);
     printf("  -o : output directory (omit to save to input folder)\n");
     printf("  -p : Philips precise float (not display) scaling (y/n, default y)\n");
+    printf("  -r : rename instead of convert DICOMs (y/n, default n)\n");
     printf("  -s : single file mode, do not convert other images in folder (y/n, default n)\n");
     printf("  -t : text notes includes private patient details (y/n, default n)\n");
     #if !defined(_WIN64) && !defined(_WIN32) //shell script for Unix only
@@ -273,7 +274,7 @@ int main(int argc, const char * argv[])
                     isSaveIni = true;
                 if (((argv[i][0] == 'i') || (argv[i][0] == 'I')) && (!isResetDefaults)) {
                     isResetDefaults = true;
-                    printf("Defaults reset\n");
+                    printf("Defaults ignored\n");
                     setDefaultOpts(&opts, argv);
                     i = 0; //re-read all settings for this pass, e.g. "dcm2niix -f %p_%s -d o" should save filename as "%p_%s"
                 }
@@ -314,7 +315,11 @@ int main(int argc, const char * argv[])
                     opts.isPhilipsFloatNotDisplayScaling = false;
                 else
                     opts.isPhilipsFloatNotDisplayScaling = true;
-
+            } else if ((argv[i][1] == 'r') && ((i+1) < argc)) {
+                i++;
+                if (invalidParam(i, argv)) return 0;
+                if ((argv[i][0] == 'y') || (argv[i][0] == 'Y'))
+                    opts.isRenameNotConvert = true;
             } else if ((argv[i][1] == 's') && ((i+1) < argc)) {
                 i++;
                 if (invalidParam(i, argv)) return 0;
