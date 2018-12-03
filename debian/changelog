@@ -1,8 +1,11 @@
 dcm2niix (1:1.0.20181125-1) UNRELEASED; urgency=medium
 
   * Fresh upstream release with many fixes and enhancements
+  * debian/copyright
+    - updated years, removed unused Apache 2.0, and included a few
+      entries based on info in Debian-Med packaging
 
- -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 28 Nov 2018 21:08:12 -0500
+ -- Yaroslav Halchenko <debian@onerussian.com>  Mon, 03 Dec 2018 15:56:05 -0500
 
 dcm2niix (1:1.0.20180622-1) neurodebian; urgency=medium
 
