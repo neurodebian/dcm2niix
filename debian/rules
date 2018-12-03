@@ -54,14 +54,9 @@ override_dh_clean:
 	# remove stuff we don't carry in the upstream tarball
 	rm -rf dcm2laz qtGui wxWidgets xcode *.command console/unused
 
-dfsg-source-tree:
-	# at this point we are golden
-
 # make orig tarball from repository content
-get-orig-source: dfsg-source-tree
-	# orig tarball, turn directory into something nicer
-	git archive --format=tar --prefix=$(srcpkg)-$(gitver)/ HEAD | \
-		gzip -9 > $(srcpkg)_$(gitver).orig.tar.gz
+get-orig-source:
+	gbp buildpackage --git-verbose -S
 
 # check that DSC patches still apply
 maint-check-dsc-patches:
