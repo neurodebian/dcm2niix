@@ -1,0 +1,19 @@
+#!/bin/bash
+
+set -eu
+
+export PATH=$(dirname $0)/dcm2niix/usr/bin:$PATH
+failed=
+
+echo "I: dcm2niix version $(dcm2niix | head -n 1)"
+for d in dcm_qa*; do
+	cd "$d"
+	echo "I: Running tests under $d"
+	./batch.sh || failed+="$d "
+	cd ..
+done
+
+if [ ! -z "$failed" ]; then
+   echo "Tests in following batteries have failed: $failed"
+   exit 1
+fi

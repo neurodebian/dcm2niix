@@ -8,6 +8,8 @@ dcm2niix (1:1.0.20181125-1) UNRELEASED; urgency=medium
     - removed -dsc-patch for elderly EOLed Ubuntu releases
   * debian/control
     - fix Vcs- fields to point to https://github.com/neurodebian/dcm2niix
+  * debian/{rules,run_tests}
+    - run tests under all dcm_qa* directories now
 
  -- Yaroslav Halchenko <debian@onerussian.com>  Mon, 03 Dec 2018 15:56:05 -0500
 
