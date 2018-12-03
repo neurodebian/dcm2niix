@@ -12,8 +12,8 @@ Build-Depends: debhelper (>= 9~),
                libyaml-cpp-dev,
                zlib1g-dev,
 Standards-Version: 3.9.8
-Vcs-Browser: https://anonscm.debian.org/cgit/pkg-exppsy/dcm2niix.git
-Vcs-Git: git://anonscm.debian.org/pkg-exppsy/dcm2niix.git
+Vcs-Browser: https://github.com/neurodebian/dcm2niix
+Vcs-Git: https://github.com/neurodebian/dcm2niix
 Homepage: https://github.com/rordenlab/dcm2niix
 
 Package: dcm2niix
