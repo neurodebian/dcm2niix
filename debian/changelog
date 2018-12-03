@@ -1,4 +1,4 @@
-dcm2niix (1:1.0.20181125-1) UNRELEASED; urgency=medium
+dcm2niix (1:1.0.20181125-1~nd0) neurodebian; urgency=medium
 
   * Fresh upstream release with many fixes and enhancements
   * debian/copyright
