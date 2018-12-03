@@ -2,7 +2,8 @@
 
 set -eu
 
-export PATH=$(dirname $0)/dcm2niix/usr/bin:$PATH
+export PATH=$(dirname $0 | xargs readlink -f)/dcm2niix/usr/bin:$PATH
+echo PATH=$PATH
 failed=
 
 echo "I: dcm2niix version $(dcm2niix | head -n 1)"
@@ -14,6 +15,8 @@ for d in dcm_qa*; do
 done
 
 if [ ! -z "$failed" ]; then
-   echo "Tests in following batteries have failed: $failed"
-   exit 1
+    echo "E: Tests in following batteries have failed: $failed"
+	exit 1
+else
+	echo "I: All tests seems to pass."
 fi
