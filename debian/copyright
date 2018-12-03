@@ -15,7 +15,7 @@ Files: */nifti*
 Comment:
  console/nifti1.h includes (with permission) dbh.h which is copyright
  1986-1995 Biomedical Imaging Resource
-License: Public-domain
+License: public-domain
 
 Files: console/tinydir.h
        xcode/core
