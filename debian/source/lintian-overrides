@@ -3,4 +3,4 @@
 patch-file-present-but-not-mentioned-in-series *-dsc-patch
 # public-domain is the legit keyword according to
 # https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-missing-license-paragraph-in-dep5-copyright public-domain
+missing-license-paragraph-in-dep5-copyright public-domain *
