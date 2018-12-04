@@ -12,6 +12,7 @@ Copyright: None
 License: Unlicense
 
 Files: */nifti*
+Copyright: None
 Comment:
  console/nifti1.h includes (with permission) dbh.h which is copyright
  1986-1995 Biomedical Imaging Resource
