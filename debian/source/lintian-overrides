@@ -1,0 +1,3 @@
+# Those are to ease backporting using backport-dsc from neurodebian-dev
+# They must not reside in default series file
+patch-file-present-but-not-mentioned-in-series *-dsc-patch
