@@ -1,3 +1,6 @@
 # Those are to ease backporting using backport-dsc from neurodebian-dev
 # They must not reside in default series file
 patch-file-present-but-not-mentioned-in-series *-dsc-patch
+# public-domain is the legit keyword according to
+# https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+missing-license-paragraph-in-dep5-copyright public-domain

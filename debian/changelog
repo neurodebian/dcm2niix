@@ -12,6 +12,8 @@ dcm2niix (1:1.0.20181125-1~nd1) neurodebian; urgency=medium
     - run tests under all dcm_qa* directories now
   * debian/source/lintian-overrides
     - do not warn about *-dsc-patch files not be included in series
+    - do not complain about public-domain in copyright since it is a
+      known keyword
 
  -- Yaroslav Halchenko <debian@onerussian.com>  Mon, 03 Dec 2018 15:56:05 -0500
 
