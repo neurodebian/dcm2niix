@@ -10,6 +10,7 @@ dcm2niix (1:1.0.20181125-1~nd1) neurodebian; urgency=medium
     - fix Vcs- fields to point to https://github.com/neurodebian/dcm2niix
   * debian/{rules,run_tests}
     - run tests under all dcm_qa* directories now
+    - use host_arch "internal" variable instead of DEB_HOST_ARCH
   * debian/source/lintian-overrides
     - do not warn about *-dsc-patch files not be included in series
     - do not complain about public-domain in copyright since it is a
