@@ -1,6 +1,8 @@
-dcm2niix (1:1.0.20181125-1~nd2) UNRELEASED; urgency=medium
+dcm2niix (1:1.0.20181125-1~nd2) neurodebian; urgency=medium
 
-  * Try to enable OpenJPEG as we ran into the case with JPEG2000 images
+  * Enable OpenJPEG back (on amd64 only) as we ran into the case with
+    JPEG2000 images which otherwise cannot be handled.  On i386 it
+    still segfaults during tests so openjpeg is enabled only on amd64
 
  -- Yaroslav Halchenko <debian@onerussian.com>  Mon, 28 Jan 2019 11:40:24 -0500
 
