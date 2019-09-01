@@ -1,3 +1,9 @@
+dcm2niix (1:1.0.20190720+git34-g605ba61-1) neurodebian-devel; urgency=medium
+
+  * Fresh snapshot build to check big endian machines
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Sun, 01 Sep 2019 09:17:24 +0200
+
 dcm2niix (1:1.0.20190720-1) neurodebian; urgency=medium
 
   * Fresh stable upstream release
