@@ -1,8 +1,9 @@
-dcm2niix (1:1.0.20190720+git34-g605ba61-1) neurodebian-devel; urgency=medium
+dcm2niix (1:1.0.20190902-1) neurodebian; urgency=medium
 
-  * Fresh snapshot build to check big endian machines
+  * New upstream release
+  * debian/patches/up_batch_setx - refreshed
 
- -- Yaroslav Halchenko <debian@onerussian.com>  Sun, 01 Sep 2019 09:17:24 +0200
+ -- Yaroslav Halchenko <debian@onerussian.com>  Sat, 19 Oct 2019 20:19:55 -0400
 
 dcm2niix (1:1.0.20190720-1) neurodebian; urgency=medium
 
