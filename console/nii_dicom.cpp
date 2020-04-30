@@ -4141,6 +4141,7 @@ struct TDICOMdata readDICOMv(char * fname, int isVerbose, int compressFlag, stru
 #define  kAcquisitionDate 0x0008+(0x0022 << 16 )
 #define  kAcquisitionDateTime 0x0008+(0x002A << 16 )
 #define  kStudyTime 0x0008+(0x0030 << 16 )
+#define  kSeriesTime 0x0008+(0x0031 << 16 )
 #define  kAcquisitionTime 0x0008+(0x0032 << 16 ) //TM
 //#define  kContentTime 0x0008+(0x0033 << 16 ) //TM
 #define  kModality 0x0008+(0x0060 << 16 ) //CS
@@ -4353,6 +4354,8 @@ uint32_t kItemTag = 0xFFFE +(0xE000 << 16 );
 uint32_t kItemDelimitationTag = 0xFFFE +(0xE00D << 16 );
 uint32_t kSequenceDelimitationItemTag = 0xFFFE +(0xE0DD << 16 );
 double TE = 0.0; //most recent echo time recorded
+float MRImageDynamicScanBeginTime = 0.0;
+
 	bool is2005140FSQ = false;
 	bool isDICOMANON = false; //issue383
 	bool isMATLAB = false; //issue383
@@ -4406,6 +4409,7 @@ double TE = 0.0; //most recent echo time recorded
     }
     char vr[2];
     //float intenScalePhilips = 0.0;
+    char seriesTimeTxt[kDICOMStr] = "";
     char acquisitionDateTimeTxt[kDICOMStr] = "";
     char imageType1st[kDICOMStr] = "";
     bool isEncapsulatedData = false;
@@ -4578,7 +4582,10 @@ double TE = 0.0; //most recent echo time recorded
 			dcmDim[numDimensionIndexValues].intenScalePhilips = d.intenScalePhilips;
 			dcmDim[numDimensionIndexValues].RWVScale = d.RWVScale;
 			dcmDim[numDimensionIndexValues].RWVIntercept = d.RWVIntercept;
-			dcmDim[numDimensionIndexValues].triggerDelayTime = d.triggerDelayTime;
+			if (isSameFloat(MRImageDynamicScanBeginTime * 1000.0, d.triggerDelayTime))
+				dcmDim[numDimensionIndexValues].triggerDelayTime = 0.0; //issue395
+			else
+				dcmDim[numDimensionIndexValues].triggerDelayTime = d.triggerDelayTime;
 			dcmDim[numDimensionIndexValues].V[0] = -1.0;
 			#ifdef MY_DEBUG
 			if (numDimensionIndexValues < 19) {
@@ -5052,6 +5059,9 @@ double TE = 0.0; //most recent echo time recorded
             //    dcmStr (lLength, &buffer[lPos], contentTimeTxt);
             //    contentTime = atof(contentTimeTxt);
             //    break;
+            case kSeriesTime :
+                dcmStr (lLength, &buffer[lPos], seriesTimeTxt);
+                break;     
             case kStudyTime :
                 dcmStr (lLength, &buffer[lPos], d.studyTime);
                 break;
@@ -5652,9 +5662,9 @@ double TE = 0.0; //most recent echo time recorded
                 
             case kMRImageDynamicScanBeginTime: { //FL
                 if (lLength != 4) break;
-                float dyn = dcmFloat(lLength, &buffer[lPos],d.isLittleEndian);
-                if (dyn < minDynamicScanBeginTime) minDynamicScanBeginTime = dyn;
-                if (dyn > maxDynamicScanBeginTime) maxDynamicScanBeginTime = dyn;
+                MRImageDynamicScanBeginTime = dcmFloat(lLength, &buffer[lPos],d.isLittleEndian);
+                if (MRImageDynamicScanBeginTime < minDynamicScanBeginTime) minDynamicScanBeginTime = MRImageDynamicScanBeginTime;
+                if (MRImageDynamicScanBeginTime > maxDynamicScanBeginTime) maxDynamicScanBeginTime = MRImageDynamicScanBeginTime;
                 break;
             }
             case kIntercept :
@@ -6733,6 +6743,16 @@ if (d.isHasPhase)
 		d.imageNum += (d.seriesNum * 1000);
 		strcpy(d.seriesInstanceUID, d.studyInstanceUID);
 		d.seriesUidCrc = mz_crc32X((unsigned char*) &d.protocolName, strlen(d.protocolName));
+	}
+	if (isSameFloat(MRImageDynamicScanBeginTime * 1000.0, d.triggerDelayTime)) //issue395
+		d.triggerDelayTime = 0.0;
+	//printf("%d\t%g\t%g\t%g\n", d.imageNum, d.acquisitionTime, d.triggerDelayTime, MRImageDynamicScanBeginTime);
+    if ((d.manufacturer == kMANUFACTURER_SIEMENS) && (strlen(seriesTimeTxt) > 1) && (d.isXA10A) && (d.xyzDim[3] == 1) && (d.xyzDim[4] < 2)) {
+    	//printWarning("Ignoring series number of XA data saved as classic DICOM (issue 394)\n");
+    	d.isStackableSeries = true;
+		d.imageNum += (d.seriesNum * 1000);
+		strcpy(d.seriesInstanceUID, seriesTimeTxt); // dest <- src
+		d.seriesUidCrc = mz_crc32X((unsigned char*) &seriesTimeTxt, strlen(seriesTimeTxt));
 	}
 	if (((d.manufacturer == kMANUFACTURER_TOSHIBA) || (d.manufacturer == kMANUFACTURER_CANON))&&  (B0Philips > 0.0)) {//issue 388
 		char txt[1024] = {""};
