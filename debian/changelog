@@ -1,3 +1,11 @@
+dcm2niix (1:1.0.20200427-1) neurodebian; urgency=medium
+
+  * Fresh non-official release from development branch, which should
+    address regression of having some functional scans from Philips
+    being split into multiple files. See https://github.com/rordenlab/dcm2niix/issues/395
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 29 Apr 2020 22:45:10 -0400
+
 dcm2niix (1:1.0.20200331-1) neurodebian; urgency=medium
 
   * New upstream release
