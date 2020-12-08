@@ -1,3 +1,9 @@
+dcm2niix (1:1.0.20201102-1) neurodebian; urgency=medium
+
+  * Recent upstream release
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Tue, 08 Dec 2020 18:08:10 -0500
+
 dcm2niix (1:1.0.20200427-1) neurodebian; urgency=medium
 
   * Fresh non-official release from development branch, which should
