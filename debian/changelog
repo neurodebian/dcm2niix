@@ -1,3 +1,10 @@
+dcm2niix (1.0.20201102+git97-g0587941-1) neurodebian-devel; urgency=medium
+
+  * New upstream snapshot from v1.0.20200427-97-g0587941 at
+    v1.0.20200427-97-g0587941
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 23 Dec 2020 13:15:59 -0500
+
 dcm2niix (1:1.0.20201102-1) neurodebian; urgency=medium
 
   * Recent upstream release
