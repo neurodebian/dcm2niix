@@ -44,13 +44,13 @@ extern "C" {
 #endif
 #if defined(__arm__) || defined(__ARM_ARCH)
     #define kCPUsuf " ARM" 
-#elif defined(__x86_64) 
+#elif defined(__x86_64)
     #define kCPUsuf " x86-64"
 #else
     #define kCPUsuf " " //unknown CPU
 #endif
 
-#define kDCMdate "v1.0.20201224"
+#define kDCMdate "v1.0.20210124"
 #define kDCMvers kDCMdate " " kJP2suf kLSsuf kCCsuf kCPUsuf
 
 static const int kMaxEPI3D = 1024; //maximum number of EPI images in Siemens Mosaic
