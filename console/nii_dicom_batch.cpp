@@ -57,11 +57,9 @@
 #endif
 
 #if defined(_WIN64) || defined(_WIN32)
-	#define myTextFileInputLists //comment out to disable this feature: https://github.com/rordenlab/dcm2niix/issues/288
 	const char kPathSeparator ='\\';
 	const char kFileSep[2] = "\\";
 #else
-	#define myTextFileInputLists
 	const char kPathSeparator ='/';
 	const char kFileSep[2] = "/";
 #endif
@@ -190,6 +188,7 @@ void geCorrectBvecs(struct TDICOMdata *d, int sliceDir, struct TDTI *vx, int isV
     //COL then if swap the x and y value and reverse the sign on the z value.
     //If the phase encoding is not COL, then just reverse the sign on the x value.
     if ((d->manufacturer != kMANUFACTURER_GE) && (d->manufacturer != kMANUFACTURER_CANON)) return;
+	if (d->isBVecWorldCoordinates) return; //Canon classic DICOMs use image space, enhanced use world space!
     if ((!d->isEPI) && (d->CSA.numDti == 1)) d->CSA.numDti = 0; //issue449
     if (d->CSA.numDti < 1) return;
     if ((toupper(d->patientOrient[0])== 'H') && (toupper(d->patientOrient[1])== 'F') && (toupper(d->patientOrient[2])== 'S'))
@@ -206,7 +205,7 @@ void geCorrectBvecs(struct TDICOMdata *d, int sliceDir, struct TDTI *vx, int isV
         return;
     }
     if (abs(sliceDir) != 3)
-        printWarning("GE DTI only tested for axial acquisitions (solution: use Xiangrui Li's dicm2nii)\n");
+        printWarning("Limited validation for non-Axial DTI: confirm gradient vector transformation.\n");
     //GE vectors from Xiangrui Li' dicm2nii, validated with datasets from https://www.nitrc.org/plugins/mwiki/index.php/dcm2nii:MainPage#Diffusion_Tensor_Imaging
 	ivec3 flp;
 	if (abs(sliceDir) == 1)
@@ -293,9 +292,9 @@ void siemensPhilipsCorrectBvecs(struct TDICOMdata *d, int sliceDir, struct TDTI 
     //convert DTI vectors from scanner coordinates to image frame of reference
     //Uses 6 orient values from ImageOrientationPatient  (0020,0037)
     // requires PatientPosition 0018,5100 is HFS (head first supine)
-    if ((d->manufacturer != kMANUFACTURER_BRUKER) && (d->manufacturer != kMANUFACTURER_TOSHIBA) && (d->manufacturer != kMANUFACTURER_HITACHI) && (d->manufacturer != kMANUFACTURER_UIH) && (d->manufacturer != kMANUFACTURER_SIEMENS) && (d->manufacturer != kMANUFACTURER_PHILIPS)) return;
+    if ((!d->isBVecWorldCoordinates) && (d->manufacturer != kMANUFACTURER_BRUKER) && (d->manufacturer != kMANUFACTURER_TOSHIBA) && (d->manufacturer != kMANUFACTURER_HITACHI) && (d->manufacturer != kMANUFACTURER_UIH) && (d->manufacturer != kMANUFACTURER_SIEMENS) && (d->manufacturer != kMANUFACTURER_PHILIPS)) return;
     if (d->CSA.numDti < 1) return;
-    if (d->manufacturer == kMANUFACTURER_UIH) {
+	if (d->manufacturer == kMANUFACTURER_UIH) {
     	for (int i = 0; i < d->CSA.numDti; i++) {
     		vx[i].V[2] = -vx[i].V[2];
     		for (int v= 0; v < 4; v++)
@@ -1377,7 +1376,7 @@ tse3d: T2*/
 			} //for k */
 			for (int k = 3; k < 11; k++) { //vessel locations
 				char newstr[256];
-				sprintf(newstr, "\t\"sWipMemBlock.AdFree%d\": %%g,\n", k);
+				sprintf(newstr, "\t\"sWipMemBlockAdFree%d\": %%g,\n", k); //issue483: sWipMemBlock.AdFree -> sWipMemBlockAdFree
 				json_FloatNotNan(fp, newstr, csaAscii.adFree[k]);
 			}
 		}
@@ -1547,11 +1546,10 @@ tse3d: T2*/
 	//	effectiveEchoSpacing =  d.CSA.sliceMeasurementDuration / (reconMatrixPE * 1000.0);
 	if ((reconMatrixPE > 0) && (bandwidthPerPixelPhaseEncode > 0.0))
 	    effectiveEchoSpacing = 1.0 / (bandwidthPerPixelPhaseEncode * reconMatrixPE);
-    if (d.effectiveEchoSpacingGE > 0.0)
-    	effectiveEchoSpacing = d.effectiveEchoSpacingGE / 1000000.0;
-    if ((effectiveEchoSpacing == 0.0) && (d.fieldStrength > 0) && (d.waterFatShift != 0.0) && (d.echoTrainLength > 0) && (reconMatrixPE > 1)) {
-    	json_Float(fp, "\t\"WaterFatShift\": %g,\n", d.waterFatShift);
-    	//https://github.com/rordenlab/dcm2niix/issues/377
+	json_Float(fp, "\t\"WaterFatShift\": %g,\n", d.waterFatShift);
+    if ((effectiveEchoSpacing == 0.0) && (d.imagingFrequency > 0.0) && (d.waterFatShift != 0.0) && (d.echoTrainLength > 0) && (reconMatrixPE > 1)) {
+    	//in theory we could use either fieldStrength or imagingFrequency, but the former is typically provided with low precision
+		//https://github.com/rordenlab/dcm2niix/issues/377
         // EchoSpacing 1/BW/EPI_factor https://www.jiscmail.ac.uk/cgi-bin/webadmin?A2=ind1308&L=FSL&D=0&P=113520
     	// this formula from https://support.brainvoyager.com/brainvoyager/functional-analysis-preparation/29-pre-processing/78-epi-distortion-correction-echo-spacing-and-bandwidth
     	// https://neurostars.org/t/consolidating-epi-echo-spacing-and-readout-time-for-philips-scanner/4406
@@ -1565,12 +1563,22 @@ tse3d: T2*/
 		ReconMatrixPE = 0028,0010 or 0028,0011 depending on 0018,1312
 		
         */
-        float actualEchoSpacing = d.waterFatShift / (d.imagingFrequency * 3.4 * (d.echoTrainLength + 1));
+		float actualEchoSpacing = d.waterFatShift / (d.imagingFrequency * 3.4 * (d.echoTrainLength + 1));
         float totalReadoutTime = actualEchoSpacing * d.echoTrainLength;
 		float effectiveEchoSpacingPhil = totalReadoutTime / (reconMatrixPE - 1);
 		json_Float(fp, "\t\"EstimatedEffectiveEchoSpacing\": %g,\n", effectiveEchoSpacingPhil);
-        fprintf(fp, "\t\"EstimatedTotalReadoutTime\": %g,\n", totalReadoutTime);
+        
+		fprintf(fp, "\t\"EstimatedTotalReadoutTime\": %g,\n", totalReadoutTime);
     }
+	if (d.effectiveEchoSpacingGE > 0.0) {
+		//TotalReadoutTime = [ ceil (PE_AcquisitionMatrix / Asset_R_factor) - 1] * ESP
+        float roundFactor = 2.0;
+        if (d.isPartialFourier) roundFactor = 4.0;
+        float totalReadoutTime = ((ceil (1/roundFactor * d.phaseEncodingLines / d.accelFactPE) * roundFactor) - 1.0) * d.effectiveEchoSpacingGE * 0.000001;
+		//printf("ASSET= %g PE_AcquisitionMatrix= %d ESP= %d TotalReadoutTime= %g\n", d.accelFactPE, d.phaseEncodingLines, d.effectiveEchoSpacingGE, totalReadoutTime);
+		//json_Float(fp, "\t\"TotalReadoutTime\": %g,\n", totalReadoutTime);
+		effectiveEchoSpacing = totalReadoutTime / (reconMatrixPE - 1);   
+	}
     json_Float(fp, "\t\"EffectiveEchoSpacing\": %g,\n", effectiveEchoSpacing);
 	// Calculate true echo spacing (should match what Siemens reports on the console)
 	// i.e., should match "echoSpacing" extracted from the ASCII CSA header, when that exists
@@ -2660,8 +2668,8 @@ int nii_createFilename(struct TDICOMdata dcm, char * niiFilename, struct TDCMopt
         strcat (outname,newstr);
         isEchoReported = true;
     }
-    if ((dcm.isNonParallelSlices) && (!isImageNumReported)) {
-    	sprintf(newstr, "_i%05d", dcm.imageNum);
+	if ((dcm.isNonParallelSlices) && (!isImageNumReported)) {
+		sprintf(newstr, "_i%05d", dcm.imageNum);
         strcat (outname,newstr);
     }
     /*if (dcm.maxGradDynVol > 0) { //Philips segmented
@@ -2704,7 +2712,7 @@ int nii_createFilename(struct TDICOMdata dcm, char * niiFilename, struct TDCMopt
     #endif
     #if defined(_WIN64) || defined(_WIN32) || defined(kMASK_WINDOWS_SPECIAL_CHARACTERS)//https://stackoverflow.com/questions/1976007/what-characters-are-forbidden-in-windows-and-linux-directory-names
     for (size_t pos = 0; pos<strlen(outname); pos ++)
-        if ((outname[pos] == '\\') || (outname[pos] == '/') || (outname[pos] == ' ') || (outname[pos] == '<') || (outname[pos] == '>') || (outname[pos] == ':')
+        if ((outname[pos] == '\\') || (outname[pos] == '/') || (outname[pos] == ' ') || (outname[pos] == '<') || (outname[pos] == '>') || (outname[pos] == ':') || (outname[pos] == ';')
             || (outname[pos] == '"') // || (outname[pos] == '/') || (outname[pos] == '\\')
             //|| (outname[pos] == '^') issue398
             || (outname[pos] == '*') || (outname[pos] == '|') || (outname[pos] == '?'))
@@ -4300,7 +4308,8 @@ float PhilipsPreciseVal (float lPV, float lRS, float lRI, float lSS) {
 void PhilipsPrecise(struct TDICOMdata * d, bool isPhilipsFloatNotDisplayScaling, struct nifti_1_header *h, int verbose) {
 	if (d->manufacturer != kMANUFACTURER_PHILIPS) return; //not Philips
 	if (d->isScaleVariesEnh) return; //issue363 rescaled before slice reordering
-	if (!isSameFloatGE(0.0, d->RWVScale)) {
+	/*
+	if (!isSameFloatGE(0.0, d->RWVScale)) { //https://github.com/rordenlab/dcm2niix/issues/493
 		h->scl_slope = d->RWVScale;
     	h->scl_inter = d->RWVIntercept;
 		printMessage("Using RWVSlope:RWVIntercept = %g:%g\n",d->RWVScale,d->RWVIntercept);
@@ -4311,7 +4320,7 @@ void PhilipsPrecise(struct TDICOMdata * d, bool isPhilipsFloatNotDisplayScaling,
 		printMessage(" RS = rescale slope, RI = rescale intercept,  SS = scale slope\n");
 		printMessage(" D = R * RS + RI    , P = D/(RS * SS)\n");
 		return;
-	}
+	}*/
 	if (d->intenScalePhilips == 0)  return; //no Philips Precise
 	//we will report calibrated "FP" values http://www.ncbi.nlm.nih.gov/pmc/articles/PMC3998685/
 	float l0 = PhilipsPreciseVal (0, d->intenScale, d->intenIntercept, d->intenScalePhilips);
@@ -4469,7 +4478,7 @@ void checkSliceTiming(struct TDICOMdata * d, struct TDICOMdata * d1, int verbose
 	while ((nSlices < kMaxEPI3D) && (d->CSA.sliceTiming[nSlices] >= 0.0))
 		nSlices++;
 	if (nSlices < 1) return;
-	if (d->CSA.sliceTiming[kMaxEPI3D-1] < 1.0) 
+	if (d->CSA.sliceTiming[kMaxEPI3D-1] < 1.0)
 		printWarning("Adjusting for negative MosaicRefAcqTimes (issue 271).\n"); 
 	bool isSliceTimeHHMMSS = (d->manufacturer == kMANUFACTURER_UIH);
 	if (isForceSliceTimeHHMMSS) isSliceTimeHHMMSS = true;
@@ -6161,7 +6170,7 @@ bool isSameSet (struct TDICOMdata d1, struct TDICOMdata d2, struct TDCMopts* opt
     if (d1.coilCrc != d2.coilCrc) {
 		if (opts->isForceStackDCE) {
 	        if (!warnings->coilVaries)
-	        	printMessage("Slices stacked despite coil variation '%s' vs '%s'\n", d1.coilName, d2.coilName);
+	        	printMessage("Slices stacked despite coil variation '%s' vs '%s' (use '-m o' to turn off merging)\n", d1.coilName, d2.coilName);
 	        warnings->coilVaries = true;
 	        *isCoilVaries = true;
 		} else {
@@ -6182,6 +6191,7 @@ bool isSameSet (struct TDICOMdata d1, struct TDICOMdata d2, struct TDCMopts* opt
         warnings->nameVaries = true;
         return false;
     }
+	if (( *isNonParallelSlices) && (d1.CSA.mosaicSlices > 1 )) return false; //issue481
     if ((!isSameFloatGE(d1.orient[1], d2.orient[1]) || !isSameFloatGE(d1.orient[2], d2.orient[2]) ||  !isSameFloatGE(d1.orient[3], d2.orient[3]) ||
     		!isSameFloatGE(d1.orient[4], d2.orient[4]) || !isSameFloatGE(d1.orient[5], d2.orient[5]) ||  !isSameFloatGE(d1.orient[6], d2.orient[6]) ) ) {
         if ((!warnings->orientVaries) && (!d1.isNonParallelSlices) && (!d1.isLocalizer))
@@ -6241,77 +6251,6 @@ int singleDICOM(struct TDCMopts* opts, char *fname) {
     free(dcmList);
     return ret;
 }// singleDICOM()
-
-#ifdef myTextFileInputLists //https://github.com/rordenlab/dcm2niix/issues/288
-int textDICOM(struct TDCMopts* opts, char *fname) {
-	//check input file
-    FILE *fp = fopen(fname, "r");
-    if (fp == NULL)
-#ifdef USING_R
-        return EXIT_FAILURE;
-#else
-    	exit(EXIT_FAILURE);
-#endif
-	int nConvert = 0;
-    char dcmname[2048];
-    while (fgets(dcmname, sizeof(dcmname), fp)) {
-		int sz = strlen(dcmname);
-		if (sz > 0 && dcmname[sz-1] == '\n') dcmname[sz-1] = 0; //Unix LF
-		if (sz > 1 && dcmname[sz-2] == '\r') dcmname[sz-2] = 0; //Windows CR/LF
-		//if (isDICOMfile(dcmname) == 0) { //<- this will reject DICOM metadata not wrapped with a header
-        if ((!is_fileexists(dcmname)) || (!is_fileNotDir(dcmname)) ) { //<-this will accept meta data
-        	fclose(fp);
-        	printError("Problem with file '%s'\n", dcmname);
-        	return EXIT_FAILURE;
-    	}
-    	//printf("%s\n", dcmname);
-		nConvert ++;
-    }
-    fclose(fp);
-    if (nConvert < 1) {
-    	printError("No DICOM files found '%s'\n", dcmname);
-    	return EXIT_FAILURE;
-    }
-    printMessage("Found %d DICOM file(s)\n", nConvert);
-    #ifndef USING_R
-    fflush(stdout); //show immediately if run from MRIcroGL GUI
-    #endif
-    TDCMsort * dcmSort = (TDCMsort *)malloc(nConvert * sizeof(TDCMsort));
-	struct TDICOMdata *dcmList  = (struct TDICOMdata *)malloc(nConvert * sizeof(struct  TDICOMdata));
-    struct TDTI4D *dti4D  = (struct TDTI4D *)malloc(sizeof(struct  TDTI4D));
-    struct TSearchList nameList;
-    nameList.maxItems = nConvert; // larger requires more memory, smaller more passes
-    nameList.str = (char **) malloc((nameList.maxItems+1) * sizeof(char *)); //reserve one pointer (32 or 64 bits) per potential file
-    nameList.numItems = 0;
-	nConvert = 0;
-	fp = fopen(fname, "r");
-    while (fgets(dcmname, sizeof(dcmname), fp)) {
-		int sz = strlen(dcmname);
-		if (sz > 0 && dcmname[sz-1] == '\n') dcmname[sz-1] = 0; //Unix LF
-		if (sz > 1 && dcmname[sz-2] == '\r') dcmname[sz-2] = 0; //Windows CR/LF
-		nameList.str[nameList.numItems]  = (char *)malloc(strlen(dcmname)+1);
-    	strcpy(nameList.str[nameList.numItems],dcmname);
-    	nameList.numItems++;
-		dcmList[nConvert] = readDICOMv(nameList.str[nConvert], opts->isVerbose, opts->compressFlag, dti4D); //ignore compile warning - memory only freed on first of 2 passes
-		fillTDCMsort(dcmSort[nConvert], nConvert, dcmList[nConvert]);
-		nConvert ++;
-    }
-    fclose(fp);
-    qsort(dcmSort, nConvert, sizeof(struct TDCMsort), compareTDCMsort); //sort based on series and image numbers....
-	int ret = saveDcm2Nii(nConvert, dcmSort, dcmList, &nameList, *opts, dti4D);
-    free(dcmSort);
-    free(dcmList);
-	free(dti4D);
-    freeNameList(nameList);
-    return ret;
-}//textDICOM()
-
-#else //ifdef myTextFileInputLists
-int textDICOM(struct TDCMopts* opts, char *fname) {
-	printError("Unable to parse txt files: re-compile with 'myTextFileInputLists' (see issue 288)");
-	return EXIT_FAILURE;
-}
-#endif
 
 size_t fileBytes(const char * fname) {
     FILE *fp = fopen(fname, "rb");
@@ -6677,25 +6616,57 @@ int nii_loadDirCore(char *indir, struct TDCMopts* opts) {
     #ifdef myTimer
     clock_t start = clock();
     #endif
-	//1: find filenames of dicom files: up to two passes if we found more files than we allocated memory
-    for (int i = 0; i < 2; i++ ) {
-        nameList.str = (char **) malloc((nameList.maxItems+1) * sizeof(char *)); //reserve one pointer (32 or 64 bits) per potential file
-        nameList.numItems = 0;
-        searchDirForDICOM(indir, &nameList, opts->dirSearchDepth, 0, opts);
-        if (nameList.numItems <= nameList.maxItems)
-            break;
-        freeNameList(nameList);
-        nameList.maxItems = nameList.numItems+1;
-        //printMessage("Second pass required, found %ld images\n", nameList.numItems);
-    }
-    if (nameList.numItems < 1) {
-        if (opts->dirSearchDepth > 0)
-        	printError("Unable to find any DICOM images in %s (or subfolders %d deep)\n", indir, opts->dirSearchDepth);
-        else //keep silent for dirSearchDepth = 0 - presumably searching multiple folders
-        	{};
-        free(nameList.str); //ignore compile warning - memory only freed on first of 2 passes
-        return kEXIT_NO_VALID_FILES_FOUND;
-    }
+    if ((is_fileNotDir(opts->indir)) && isExt(opts->indir, ".txt") ){
+		nameList.str = (char **) malloc((nameList.maxItems+1) * sizeof(char *)); //reserve one pointer (32 or 64 bits) per potential file
+		nameList.numItems = 0;
+		FILE *fp = fopen(opts->indir, "r"); //textDICOM
+		if (fp == NULL)
+			return EXIT_FAILURE;
+		char dcmname[2048];
+		while (fgets(dcmname, sizeof(dcmname), fp)) {
+			int sz = (int)strlen(dcmname);
+			if (sz > 0 && dcmname[sz-1] == '\n') dcmname[sz-1] = 0; //Unix LF
+			if (sz > 1 && dcmname[sz-2] == '\r') dcmname[sz-2] = 0; //Windows CR/LF
+			if ((!is_fileexists(dcmname)) || (!is_fileNotDir(dcmname)) ) { //<-this will accept meta data
+				fclose(fp);
+				printError("Problem with file '%s'\n", dcmname);
+				return EXIT_FAILURE;
+			}
+			if (nameList.numItems < nameList.maxItems) {
+				nameList.str[nameList.numItems]  = (char *)malloc(strlen(dcmname)+1);
+				strcpy(nameList.str[nameList.numItems],dcmname);
+			}
+			nameList.numItems ++;
+		}
+		fclose(fp);
+		if (nameList.numItems >= nameList.maxItems) {
+			printError("Too many file names in '%s'\n", opts->indir);
+			return EXIT_FAILURE;
+		}
+		if (nameList.numItems < 1)
+			return kEXIT_NO_VALID_FILES_FOUND;
+		printMessage("Found %lu files in '%s'\n", nameList.numItems, opts->indir);
+    } else {
+		//1: find filenames of dicom files: up to two passes if we found more files than we allocated memory
+		for (int i = 0; i < 2; i++ ) {
+			nameList.str = (char **) malloc((nameList.maxItems+1) * sizeof(char *)); //reserve one pointer (32 or 64 bits) per potential file
+			nameList.numItems = 0;
+			searchDirForDICOM(indir, &nameList, opts->dirSearchDepth, 0, opts);
+			if (nameList.numItems <= nameList.maxItems)
+				break;
+			freeNameList(nameList);
+			nameList.maxItems = nameList.numItems+1;
+			//printMessage("Second pass required, found %ld images\n", nameList.numItems);
+		}
+		if (nameList.numItems < 1) {
+			if (opts->dirSearchDepth > 0)
+				printError("Unable to find any DICOM images in %s (or subfolders %d deep)\n", indir, opts->dirSearchDepth);
+			else //keep silent for dirSearchDepth = 0 - presumably searching multiple folders
+				{};
+			free(nameList.str); //ignore compile warning - memory only freed on first of 2 passes
+			return kEXIT_NO_VALID_FILES_FOUND;
+		}
+	}
     size_t nDcm = nameList.numItems;
     printMessage( "Found %lu DICOM file(s)\n", nameList.numItems); //includes images and other non-image DICOMs
     #ifdef myTimer
@@ -6726,7 +6697,9 @@ int nii_loadDirCore(char *indir, struct TDCMopts* opts) {
             continue;
     	}
         dcmList[i] = readDICOMv(nameList.str[i], opts->isVerbose, opts->compressFlag, dti4D); //ignore compile warning - memory only freed on first of 2 passes
-        //if (!dcmList[i].isValid) printf(">>>>Not a valid DICOM %s\n", nameList.str[i]);
+        if (opts->isIgnoreSeriesInstanceUID)
+			 dcmList[i].seriesUidCrc = dcmList[i].seriesNum;
+		//if (!dcmList[i].isValid) printf(">>>>Not a valid DICOM %s\n", nameList.str[i]);
         if ((dcmList[i].isValid) && ((dti4D->sliceOrder[0] >= 0) || (dcmList[i].CSA.numDti > 1))) { //4D dataset: dti4D arrays require huge amounts of RAM - write this immediately
 			struct TDCMsort dcmSort[1];
 			fillTDCMsort(dcmSort[0], i, dcmList[i]);
@@ -6808,8 +6781,8 @@ int nii_loadDirCore(char *indir, struct TDCMopts* opts) {
 			nConvert = 0;
 			for (int j = i; j < (int)nDcm; j++) {
 				isMultiEcho = false;
-				isNonParallelSlices = false;
 				isCoilVaries = false;
+				isNonParallelSlices = false; 
 				if (isSameSet(dcmList[i], dcmList[j], opts, &warnings, &isMultiEcho, &isNonParallelSlices, &isCoilVaries)) {
                     dcmList[j].converted2NII = 1; //do not reprocess repeats
                     fillTDCMsort(dcmSort[nConvert], j, dcmList[j]);
@@ -6872,6 +6845,25 @@ int nii_loadDirCore(char *indir, struct TDCMopts* opts) {
 				nConvert++;
 			}
 		} //for all images with same seriesUID as first one
+		if ((isNonParallelSlices) && (dcmList[ii].CSA.mosaicSlices > 1) && (nConvert > 0)) { //issue481: if ANY volumes are non-parallel, save ALL as 3D
+			printWarning("Saving mosaics with non-parallel slices as 3D (issue 481)\n");
+			for (int j = i; j < (int)nDcm; j++) {
+				int ji = crcSort[j].indx;
+				if (dcmList[ii].seriesUidCrc != dcmList[ji].seriesUidCrc) break; 
+				dcmList[ji].converted2NII = 1;
+				dcmList[ji].isNonParallelSlices = true;
+				if (isMultiEcho) dcmList[ji].isMultiEcho = true;
+				if (isCoilVaries) dcmList[ji].isCoilVaries = true;
+				struct TDCMsort dcmSort[1];
+				fillTDCMsort(dcmSort[0], ji, dcmList[ji]);
+				int ret = saveDcm2Nii(1, dcmSort, dcmList, &nameList, *opts, dti4D);
+				if (ret == EXIT_SUCCESS)
+					nConvertTotal++;
+				else
+					convertError = true;		
+			}
+			continue;
+		} //issue481
 		//issue 381: ensure all images are informed if there are variations in echo, parallel slices, coil name:
 		if (isMultiEcho)
 			for (int j = i; j <= jMax; j++) {
@@ -7036,8 +7028,10 @@ int nii_loadDir(struct TDCMopts* opts) {
             return convert_parRec(pname, *opts);
         };
     }
-    if (isFile && (opts->isOnlySingleFile) && isExt(indir, ".txt") )
-    	return textDICOM(opts, indir);
+	if (isFile && (opts->isOnlySingleFile) && isExt(indir, ".txt") ) {
+		strcpy(opts->indir,indir);
+		return nii_loadDirCore(opts->indir, opts);
+	}
 	if (opts->isRenameNotConvert) {
 		int nConvert = searchDirRenameDICOM(opts->indir, opts->dirSearchDepth, 0, opts);
 		if (nConvert < 0) return kEXIT_RENAME_ERROR;
@@ -7244,6 +7238,7 @@ void setDefaultOpts (struct TDCMopts *opts, const char * argv[]) { //either "set
     opts->isRenameNotConvert = false;
     opts->isForceStackSameSeries = 2; //automatic: stack CTs, do not stack MRI
     opts->isForceStackDCE = true;
+	opts->isIgnoreSeriesInstanceUID = false;
     opts->isIgnoreDerivedAnd2D = false;
     opts->isForceOnsetTimes = true;
     opts->isPhilipsFloatNotDisplayScaling = true;
